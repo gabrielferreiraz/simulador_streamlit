@@ -1,0 +1,223 @@
+
+:root {
+    --primary-color: #4CAF50; /* Green */
+    --secondary-color: #333333;
+    --background-color: #1a1a1a;
+    --card-background: #2c2c2c;
+    --text-color: #e0e0e0;
+    --header-color: #66BB6A;
+    --border-color: #555555;
+    --shadow-color: rgba(0,0,0,0.3);
+    --button-hover-color: #388E3C;
+    --button-shadow-color: rgba(76, 175, 80, 0.3);
+    --button-hover-shadow-color: rgba(76, 175, 80, 0.4);
+    --info-bg: #263238;
+    --info-border: #00BCD4;
+    --info-text: #B2EBF2;
+    --warning-bg: #424242;
+    --warning-border: #FFC107;
+    --warning-text: #FFEB3B;
+    --error-bg: #3E2723;
+    --error-border: #F44336;
+    --error-text: #FFCDD2;
+}
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+.stApp {
+    background-color: var(--background-color);
+}
+.css-1d391kg, .css-1lcbmhc { /* Sidebar */
+    background-color: var(--card-background);
+    padding: 20px;
+    border-right: 1px solid var(--border-color);
+    box-shadow: 2px 0 5px var(--shadow-color);
+    width: 300px; /* Increased width */
+}
+.css-1d391kg .stButton > button { /* Sidebar buttons */
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    background-color: var(--card-background);
+    padding: 10px 0;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+.css-1d391kg .stButton > button:hover {
+    background-color: var(--primary-color);
+    color: var(--card-background);
+}
+.css-1d391kg .stRadio > label { /* Sidebar radio buttons */
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+.css-1d391kg .stRadio div[role="radiogroup"] {
+    padding: 10px;
+    border-radius: 8px;
+    background-color: var(--secondary-color);
+}
+.css-1d391kg .stRadio div[role="radiogroup"] label {
+    margin-bottom: 5px;
+    font-weight: normal;
+    color: var(--text-color);
+}
+.css-1d391kg .stRadio div[role="radiogroup"] label:hover {
+    color: var(--primary-color);
+}
+h1, h2, h3, h4, h5, h6 {
+    color: var(--header-color);
+    font-weight: 600;
+    margin-bottom: 15px;
+}
+h1 { font-size: 3em; }
+h2 { font-size: 2.2em; }
+h3 { font-size: 2em; } /* Aumentado */
+h4 { font-size: 1.6em; } /* Aumentado */
+.stContainer, .stExpander {
+    background-color: var(--card-background);
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+    margin-bottom: 25px;
+    border: none;
+}
+.stExpander > div > div { /* Expander header */
+    background-color: var(--secondary-color);
+    border-radius: 10px;
+    padding: 15px 20px;
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--primary-color);
+    border: 1px solid var(--border-color);
+}
+.stExpander > div > div:hover {
+    background-color: #444444;
+}
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stSelectbox > div > div > button,
+.stFileUploader > div > div > button {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px 18px;      /* Aumentado */
+    font-size: 1.3em;        /* Aumentado */
+    color: var(--text-color);
+    background-color: var(--background-color);
+    transition: all 0.3s ease;
+}
+.stTextInput > div > div > input:focus,
+.stNumberInput > div > div > input:focus,
+.stSelectbox > div > div > button:focus,
+.stFileUploader > div > div > button:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(76, 175, 80, 0.25);
+}
+.stSelectbox > label, .stTextInput > label, .stNumberInput > label, .stRadio > label, .stFileUploader > label {
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 8px;
+    font-size: 1.3em;      /* Aumentado */
+}
+.stButton > button {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 8px;
+    padding: 16px 28px;    /* Aumentado */
+    font-size: 1.3em;      /* Aumentado */
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: 0 4px 10px var(--button-shadow-color);
+}
+.stButton > button:hover {
+    background-color: var(--button-hover-color);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px var(--button-hover-shadow-color);
+}
+.stButton > button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 5px rgba(76, 175, 80, 0.2);
+}
+.stMetric {
+    background-color: var(--secondary-color);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 2px 8px var(--shadow-color);
+    border: 1px solid var(--border-color);
+}
+.stMetric > label {
+    font-size: 1.1em;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+.stMetric > div[data-testid="stMetricValue"] {
+    font-size: 2.2em;
+    color: var(--header-color);
+    font-weight: bold;
+    margin-top: 5px;
+}
+.stMetric > div[data-testid="stMetricDelta"] {
+    font-size: 1em;
+    color: var(--text-color);
+}
+.stDataFrame {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+.stDataFrame th {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 1.1em;
+    padding: 12px 15px;
+    text-align: left;
+}
+.stDataFrame td {
+    background-color: var(--card-background);
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 1em;
+    color: var(--text-color);
+}
+.stDataFrame tr:hover td {
+    background-color: var(--secondary-color);
+}
+.stAlert.info { background-color: var(--info-bg); border-left: 5px solid var(--info-border); color: var(--info-text); }
+.stAlert.warning { background-color: var(--warning-bg); border-left: 5px solid var(--warning-border); color: var(--warning-text); }
+.stAlert.error { background-color: var(--error-bg); border-left: 5px solid var(--error-border); color: var(--error-text); }
+.stTabs [data-baseweb="tab-list"] button {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: var(--text-color);
+    background-color: var(--background-color);
+    border-radius: 8px 8px 0 0;
+    padding: 15px 25px;
+    margin-right: 5px;
+    transition: all 0.3s ease;
+}
+.stTabs [data-baseweb="tab-list"] button:hover {
+    background-color: #444444;
+    color: var(--primary-color);
+}
+.stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+    background-color: var(--primary-color);
+    color: white;
+    box-shadow: 0 2px 5px var(--shadow-color);
+}
+.stTabs [data-baseweb="tab-panel"] {
+    background-color: var(--card-background);
+    border-radius: 0 0 12px 12px;
+    padding: 25px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+.st-emotion-cache-10qj07v { /* Divider */
+    border-top: 2px solid var(--border-color);
+    margin: 30px 0;
+}
