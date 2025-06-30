@@ -1,0 +1,13 @@
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Environment variables
+.env
+
+# Database file
+simulations.db
+
+# Python cache
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
