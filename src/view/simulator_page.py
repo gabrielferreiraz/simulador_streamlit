@@ -173,7 +173,7 @@ def show():
             )
 
         safe_client_name = str(st.session_state.simulation_inputs.get('cliente_nome', '')).strip().replace(' ', '_').lower() or "cliente"
-        credito_value = int(st.session_state.simulation_inputs['valor_credito'])
+        credito_value = int(resultados.get('credito_contratado', 0))
         file_name = f"simulacao_servopa_{safe_client_name}_credito_{credito_value}.pdf"
 
         st.download_button(
