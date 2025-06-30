@@ -1,23 +1,15 @@
+
+# main.py - Ponto de Entrada e Página de Login
 import streamlit as st
-import logging
 from src.db.database import init_db
 from src.db.user_repository import add_user, get_user_by_email
-from src.auth.auth_service import hash_password
+from src.auth.auth_service import check_password, login_user, hash_password
 from src.utils.style_utils import apply_dark_theme, hide_main_page_from_sidebar
 
-# Configura o logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configuração da página deve ser a primeira chamada do Streamlit
+st.set_page_config(layout="centered", page_title="Login - Simulador Servopa", page_icon="🔑")
 
-st.set_page_config(layout="centered", page_title="Simulador Servopa", page_icon="🔑")
-
-# Carrega Font Awesome
-st.markdown(
-    """
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    """,
-    unsafe_allow_html=True
-)
-
+# Aplica o tema escuro e esconde a navegação da página principal
 apply_dark_theme()
 hide_main_page_from_sidebar()
 
@@ -41,15 +33,36 @@ def setup_initial_admin():
             role="Admin",
             password_hash=master_password_hash
         )
-        logging.info("Master admin user created successfully.")
+        print("Master admin user created successfully.")
 
 # Inicializa o banco de dados e o admin mestre
 try:
     init_db()
     setup_initial_admin()
 except Exception as e:
-    logging.error(f"Erro crítico na inicialização da aplicação: {e}")
     st.error(f"Erro crítico na inicialização da aplicação: {e}")
     st.stop()
 
-st.switch_page("pages/00_Login.py")
+# --- Lógica de Navegação e Estado ---
+
+# Se o usuário já está autenticado, redireciona para o simulador
+if check_password():
+    st.switch_page("pages/1_📊_Simulador.py")
+
+# --- Página de Login ---
+def login_page():
+    """Renderiza o formulário de login."""
+    st.title("Login - Simulador Servopa")
+    st.markdown("Por favor, faça login para acessar o sistema.")
+
+    with st.form("login_form"):
+        email = st.text_input("E-mail", key="login_email")
+        password = st.text_input("Senha", type="password", key="login_password")
+        submitted = st.form_submit_button("Entrar")
+
+        if submitted:
+            if login_user(email, password):
+                st.switch_page("pages/1_📊_Simulador.py")
+
+# Renderiza a página de login
+login_page()
