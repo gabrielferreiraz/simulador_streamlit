@@ -1,8 +1,14 @@
 import sqlite3
 import pandas as pd
+import logging
 from .database import get_db_connection
 
 def create_team(name, supervisor_id):
+    if not name or not name.strip():
+        return False, "Nome da equipe não pode ser vazio."
+    if supervisor_id is None:
+        return False, "Supervisor é obrigatório para criar uma equipe."
+
     try:
         with get_db_connection() as con:
             cur = con.cursor()
@@ -27,8 +33,8 @@ def get_all_teams():
                 LEFT JOIN users u ON t.supervisor_id = u.id ORDER BY t.name
             """, con)
         return df
-    except Exception as e:
-        print(f"Falha ao buscar equipes: {e}")
+    except sqlite3.Error as e:
+        logging.error(f"Falha ao buscar equipes: {e}")
         return pd.DataFrame()
 
 def update_team_members(team_id, member_ids):
@@ -55,4 +61,4 @@ def delete_team(team_id):
             con.commit()
         return True, "Equipe deletada com sucesso!"
     except sqlite3.Error as e:
-        return False, f"Erro ao deletar equipe: {e}
+        return False, f"Erro ao deletar equipe: {e}"

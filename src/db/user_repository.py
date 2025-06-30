@@ -1,9 +1,17 @@
 import sqlite3
 import pandas as pd
+import logging
 from .database import get_db_connection
 
 def add_user(nome, tipo_consultor, telefone, email, foto_bytes, role, password_hash):
     """Adiciona um novo usuário ao banco de dados com uma senha já hasheada."""
+    if not nome or not nome.strip():
+        return False, "Nome do usuário não pode ser vazio."
+    if not email or not email.strip():
+        return False, "E-mail não pode ser vazio."
+    if not password_hash:
+        return False, "Senha (hash) não pode ser vazia."
+
     sql = "INSERT INTO users (nome, tipo_consultor, telefone, email, foto, role, password) VALUES (?, ?, ?, ?, ?, ?, ?)"
     try:
         with get_db_connection() as con:
@@ -22,8 +30,8 @@ def get_all_users():
         with get_db_connection() as con:
             df = pd.read_sql_query(sql, con)
         return df
-    except Exception as e:
-        print(f"Falha ao buscar usuários: {e}")
+    except sqlite3.Error as e:
+        logging.error(f"Falha ao buscar usuários: {e}")
         return pd.DataFrame()
 
 def get_user_by_id(user_id):
@@ -34,7 +42,7 @@ def get_user_by_id(user_id):
             user_data = con.execute(sql, (user_id,)).fetchone()
         return user_data
     except sqlite3.Error as e:
-        print(f"Falha ao buscar usuário por ID: {e}")
+        logging.error(f"Falha ao buscar usuário por ID: {e}")
         return None
 
 def get_user_by_email(email):
@@ -45,7 +53,7 @@ def get_user_by_email(email):
             user_data = con.execute(sql, (email,)).fetchone()
         return user_data
     except sqlite3.Error as e:
-        print(f"Falha ao buscar usuário por e-mail: {e}")
+        logging.error(f"Falha ao buscar usuário por e-mail: {e}")
         return None
 
 def update_user(user_id, nome, tipo, telefone, email, foto_bytes, role, password_hash=None):
@@ -94,7 +102,7 @@ def get_user_simulation_stats(user_id):
             'total_credito': stats['total_credito'] or 0
         }
     except sqlite3.Error as e:
-        print(f"Erro ao buscar estatísticas do usuário: {e}")
+        logging.error(f"Erro ao buscar estatísticas do usuário: {e}")
         return {'total_simulacoes': 0, 'media_credito': 0, 'total_credito': 0}
 
 def get_user_detailed_simulations(user_id):
@@ -104,6 +112,6 @@ def get_user_detailed_simulations(user_id):
         with get_db_connection() as con:
             df = pd.read_sql_query(sql, con, params=(user_id,))
         return df
-    except Exception as e:
-        print(f"Falha ao buscar simulações detalhadas do usuário: {e}")
+    except sqlite3.Error as e:
+        logging.error(f"Falha ao buscar simulações detalhadas do usuário: {e}")
         return pd.DataFrame()

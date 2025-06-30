@@ -17,8 +17,10 @@ def check_password() -> bool:
     """Verifica se o usuário na sessão atual está autenticado."""
     return st.session_state.get("authenticated", False)
 
-def login_user(email: str, password: str) -> bool:
-    """Tenta autenticar um usuário e atualiza o estado da sessão."""
+def login_user(email: str, password: str) -> tuple[bool, str | None]:
+    """Tenta autenticar um usuário e atualiza o estado da sessão.
+    Retorna (True, None) em caso de sucesso ou (False, mensagem_de_erro) em caso de falha.
+    """
     user_data = get_user_by_email(email)
     if user_data:
         # user_data: (id, nome, tipo_consultor, telefone, email, foto, role, team_id, password)
@@ -29,15 +31,13 @@ def login_user(email: str, password: str) -> bool:
             st.session_state["user_name"] = user_data[1]
             st.session_state["user_role"] = user_data[6]
             log_audit_event(user_data[0], "LOGIN_SUCCESS", f"User {user_data[1]} ({user_data[4]}) logged in.")
-            return True
+            return True, None
         else:
             log_audit_event(None, "LOGIN_FAILURE", f"Failed login for email: {email} (incorrect password).")
-            st.error("Senha incorreta.")
-            return False
+            return False, "Senha incorreta."
     else:
         log_audit_event(None, "LOGIN_FAILURE", f"Failed login for email: {email} (email not found).")
-        st.error("E-mail não encontrado.")
-        return False
+        return False, "E-mail não encontrado."
 
 def logout_user():
     """Desconecta o usuário e limpa o estado da sessão."""
@@ -53,5 +53,4 @@ def logout_user():
             del st.session_state[key]
             
     st.info("Você foi desconectado.")
-    # Força o rerun para garantir que a página de login seja exibida
-    st.rerun()
+    st.switch_page("pages/00_Login.py")

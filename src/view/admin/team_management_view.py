@@ -1,5 +1,6 @@
 # src/view/admin/team_management_view.py
 import streamlit as st
+import pandas as pd
 from src.db.team_repository import create_team, get_all_teams, update_team_members, delete_team
 from src.db.user_repository import get_all_users
 from src.db.audit_repository import log_audit_event
@@ -24,26 +25,28 @@ def show():
         render_manage_team_members_section(teams_df)
 
 def render_create_team_form():
+    all_users = get_all_users()
+    supervisors_df = all_users[all_users['role'] == 'Supervisor']
+    has_supervisors = not supervisors_df.empty
+
+    if not has_supervisors:
+        st.warning("Não há supervisores cadastrados. Por favor, adicione um usuário com o cargo de 'Supervisor' antes de criar uma equipe.")
+
     with st.form("add_team_form", clear_on_submit=True):
-        new_team_name = st.text_input("Nome da Equipe")
-        all_users = get_all_users()
-        if all_users.empty:
-            st.warning("Nenhum usuário cadastrado para ser supervisor.")
-            supervisors_df = pd.DataFrame(columns=['id', 'nome'])
-        else:
-            supervisors_df = all_users[all_users['role'] == 'Supervisor']
+        new_team_name = st.text_input("Nome da Equipe", disabled=not has_supervisors)
         
         supervisor_options = {row['id']: row['nome'] for _, row in supervisors_df.iterrows()}
         
         selected_supervisor_id = st.selectbox(
             "Selecionar Supervisor", 
             options=list(supervisor_options.keys()), 
-            format_func=lambda x: supervisor_options[x], 
+            format_func=lambda x: supervisor_options.get(x, "Supervisor inválido"), 
             index=None, 
-            placeholder="Escolha um supervisor..."
+            placeholder="Escolha um supervisor...",
+            disabled=not has_supervisors
         )
         
-        team_submitted = st.form_submit_button("Criar Equipe")
+        team_submitted = st.form_submit_button("Criar Equipe", disabled=not has_supervisors)
         if team_submitted:
             if not (new_team_name and selected_supervisor_id):
                 st.warning("Nome da equipe e supervisor são obrigatórios.")

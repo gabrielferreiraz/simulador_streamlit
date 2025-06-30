@@ -1,31 +1,107 @@
 # src/view/admin/user_management_view.py
 import streamlit as st
 import io
+import pandas as pd
 from src.db.user_repository import add_user, get_all_users, get_user_by_id, update_user, delete_user, get_user_simulation_stats, get_user_detailed_simulations
 from src.db.audit_repository import log_audit_event
 from src.auth.auth_service import hash_password
 from src.config import config
 import pandas as pd
 
+def render_user_list():
+    """Renderiza a lista de usuários com opções de filtro."""
+    if st.session_state.get("user_role") != "Admin":
+        st.warning("Apenas usuários com permissão de administrador podem visualizar a lista de usuários.")
+        return
+
+    st.subheader("Lista de Usuários Cadastrados")
+
+    # Inicializa estados para os filtros
+    if 'filter_role' not in st.session_state:
+        st.session_state.filter_role = "Todos"
+    if 'filter_name' not in st.session_state:
+        st.session_state.filter_name = ""
+    if 'filter_team' not in st.session_state:
+        st.session_state.filter_team = "Todos"
+
+    # Expander para os filtros (sempre expandido)
+    with st.expander("Opções de Filtro", expanded=True):
+        col_role, col_name = st.columns(2)
+        
+        # Filtro por Cargo
+        roles_options = ["Todos"] + config.USER_ROLES
+        st.session_state.filter_role = col_role.selectbox(
+            "Filtrar por Cargo",
+            options=roles_options,
+            index=roles_options.index(st.session_state.filter_role),
+            key="filter_role_select"
+        )
+
+        # Filtro por Nome
+        st.session_state.filter_name = col_name.text_input(
+            "Filtrar por Nome",
+            value=st.session_state.filter_name,
+            key="filter_name_input"
+        )
+
+        # Filtro por Equipe
+        from src.db.team_repository import get_all_teams
+        all_teams_df = get_all_teams()
+        team_options = {"Todos": "Todos"}
+        if not all_teams_df.empty:
+            team_options.update({row['id']: row['name'] for _, row in all_teams_df.iterrows()})
+        
+        st.session_state.filter_team = st.selectbox(
+            "Filtrar por Equipe",
+            options=list(team_options.keys()),
+            format_func=lambda x: team_options[x],
+            index=list(team_options.keys()).index(st.session_state.filter_team),
+            key="filter_team_select"
+        )
+    # No "Aplicar Filtros" button needed, as filters update automatically on widget change.
+    # The expander's state (expanded/collapsed) is now correctly managed by st.session_state.show_filters.
+    # The filtering logic below this block will automatically re-run when filter values change.
+
+    # Obter todos os usuários
+    users_df = get_all_users()
+
+    if users_df.empty:
+        st.info("Nenhum usuário cadastrado.")
+    else:
+        # Aplicar filtros
+        filtered_df = users_df.copy()
+
+        if st.session_state.filter_role != "Todos":
+            filtered_df = filtered_df[filtered_df['role'] == st.session_state.filter_role]
+
+        if st.session_state.filter_name:
+            filtered_df = filtered_df[filtered_df['nome'].str.contains(st.session_state.filter_name, case=False, na=False)]
+
+        if st.session_state.filter_team != "Todos":
+            # Filtrar por team_id, tratando NaN para usuários sem equipe
+            filtered_df = filtered_df[filtered_df['team_id'].fillna("Todos") == st.session_state.filter_team]
+
+        if filtered_df.empty:
+            st.info("Nenhum usuário encontrado com os filtros aplicados.")
+        else:
+            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+
 def show():
-    """Renderiza a aba de gerenciamento de usuários."""
+    """Renderiza a aba de gestão de usuários (adicionar, editar, deletar)."""
     if st.session_state.get("user_role") != "Admin":
         st.warning("Apenas usuários com permissão de administrador podem gerenciar usuários.")
         return
 
-    st.subheader("Gerenciamento de Consultores e Supervisores")
+    st.subheader("Gestão de Consultores e Supervisores")
     with st.expander("Adicionar Novo Usuário", expanded=False):
         render_add_user_form()
 
     st.divider()
-    st.subheader("Lista de Usuários")
-    users_df = get_all_users()
+    st.subheader("Editar ou Deletar Usuário")
+    users_df = get_all_users() # Precisa buscar novamente para o selectbox
     if users_df.empty:
-        st.info("Nenhum usuário cadastrado.")
+        st.info("Nenhum usuário cadastrado para editar ou deletar.")
     else:
-        st.dataframe(users_df, use_container_width=True, hide_index=True)
-        st.divider()
-        st.subheader("Editar ou Deletar Usuário")
         render_edit_user_section(users_df)
 
 def render_add_user_form():
@@ -88,7 +164,16 @@ def render_edit_user_form(uid, nome, tipo, telefone, email, role, foto_bytes):
     with st.form(f"edit_user_form_{uid}"):
         edited_nome = st.text_input("Nome", value=nome)
         edited_role = st.selectbox("Cargo", config.USER_ROLES, index=config.USER_ROLES.index(role))
-        edited_tipo = st.selectbox("Tipo", config.CONSULTOR_TYPES, index=config.CONSULTOR_TYPES.index(tipo) if tipo in config.CONSULTOR_TYPES else 0) if edited_role == "Consultor" else None
+        
+        edited_tipo = None
+        if edited_role == "Consultor":
+            try:
+                # Garante que o índice seja válido mesmo se 'tipo' for None ou não estiver na lista
+                current_tipo_index = config.CONSULTOR_TYPES.index(tipo) if tipo in config.CONSULTOR_TYPES else 0
+            except (ValueError, TypeError):
+                current_tipo_index = 0
+            edited_tipo = st.selectbox("Tipo", config.CONSULTOR_TYPES, index=current_tipo_index)
+
         edited_telefone = st.text_input("Telefone", value=telefone or "")
         edited_email = st.text_input("Email", value=email or "")
         edited_password = st.text_input("Nova Senha", type="password", placeholder="Deixe em branco para não alterar")

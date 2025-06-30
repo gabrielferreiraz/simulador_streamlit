@@ -21,11 +21,15 @@ def show():
     if 'confirming_delete_team' not in st.session_state:
         st.session_state.confirming_delete_team = None
 
-    tab_users, tab_teams = st.tabs(["Gerenciar Usuários", "Gerenciar Equipes"])
+    tab_user_management, tab_user_list, tab_teams = st.tabs(["Gestão de Usuários", "Lista de Usuários", "Gerenciar Equipes"])
 
-    with tab_users:
-        # Chama a visualização de gerenciamento de usuários
+    with tab_user_management:
+        # Chama a visualização de gerenciamento de usuários (adicionar, editar, deletar)
         user_management_view.show()
+
+    with tab_user_list:
+        # Chama a visualização da lista de usuários
+        user_management_view.render_user_list()
 
     with tab_teams:
         # Chama a visualização de gerenciamento de equipes

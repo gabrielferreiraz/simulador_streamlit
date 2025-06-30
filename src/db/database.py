@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import logging
 
 DB_FILE = "simulations.db"
 
@@ -45,6 +46,12 @@ def init_db():
                     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
+            # Adiciona a coluna nome_cliente se ela não existir
+            cur.execute("PRAGMA table_info(simulations);")
+            columns = [col[1] for col in cur.fetchall()]
+            if 'nome_cliente' not in columns:
+                cur.execute("ALTER TABLE simulations ADD COLUMN nome_cliente TEXT;")
+                logging.info("Coluna 'nome_cliente' adicionada à tabela 'simulations'.")
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS teams (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +85,7 @@ def init_db():
                 )
             ''')
             con.commit()
-            print("Database tables initialized successfully.")
+            logging.info("Database tables initialized successfully.")
     except sqlite3.Error as e:
-        print(f"Error initializing the database: {e}")
+        logging.error(f"Error initializing the database: {e}")
         raise e
