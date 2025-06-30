@@ -95,6 +95,18 @@ def show():
 
     # --- Botão de Ação ---
     if st.button("Gerar Simulação", type="primary", use_container_width=True):
+        # Validação de campos obrigatórios
+        required_fields = {
+            'valor_credito': "Crédito (R$)",
+            'prazo_meses': "Qtd Meses",
+            'taxa_administracao_total': "Taxa (%)"
+        }
+        missing_fields = [label for field, label in required_fields.items() if st.session_state.simulation_inputs.get(field) is None]
+
+        if missing_fields:
+            st.error(f"Por favor, preencha os campos obrigatórios: {', '.join(missing_fields)}.")
+            return
+
         with st.spinner("Calculando..."):
             # Prepara os inputs para a função de cálculo
             inputs_calculo = st.session_state.simulation_inputs.copy()
