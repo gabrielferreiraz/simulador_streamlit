@@ -112,3 +112,4 @@ def show():
                     st.plotly_chart(fig_pie, use_container_width=True)
                 else:
                     st.info("Sem dados para o gráfico de simulações por consultor da equipe.")
+

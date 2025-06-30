@@ -40,7 +40,7 @@ def get_user_by_id(user_id):
     try:
         with get_db_connection() as con:
             user_data = con.execute(sql, (user_id,)).fetchone()
-        return user_data
+        return user_data if user_data else None
     except sqlite3.Error as e:
         logging.error(f"Falha ao buscar usuário por ID: {e}")
         return None

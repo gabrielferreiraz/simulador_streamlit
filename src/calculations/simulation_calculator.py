@@ -10,18 +10,24 @@ def realizar_calculo_simulacao(inputs):
     Returns:
         dict: Um dicionário contendo todos os resultados calculados ou um status de erro.
     """
+    # --- Validação de Entradas Essenciais ---
+    required_keys = ['valor_credito', 'prazo_meses', 'taxa_administracao_total']
+    for key in required_keys:
+        if inputs.get(key) is None:
+            return {"status": "error", "message": f"Erro de Validação: O campo '{key}' é obrigatório para o cálculo."}
+
     try:
         # --- Desempacotar Inputs ---
         valor_credito = inputs['valor_credito']
         prazo_meses = inputs['prazo_meses']
         taxa_administracao_total = inputs['taxa_administracao_total']
-        opcao_plano_light = inputs['opcao_plano_light']
-        opcao_seguro_prestamista = inputs['opcao_seguro_prestamista']
-        percentual_lance_ofertado = inputs['percentual_lance_ofertado']
-        percentual_lance_embutido = inputs['percentual_lance_embutido']
-        qtd_parcelas_lance_ofertado = inputs['qtd_parcelas_lance_ofertado']
-        opcao_diluir_lance = inputs['opcao_diluir_lance']
-        assembleia_atual = inputs['assembleia_atual']
+        opcao_plano_light = inputs.get('opcao_plano_light', 1) # Padrão para '100%'
+        opcao_seguro_prestamista = inputs.get('opcao_seguro_prestamista', 0) # Padrão para 'Não'
+        percentual_lance_ofertado = inputs.get('percentual_lance_ofertado', 0)
+        percentual_lance_embutido = inputs.get('percentual_lance_embutido', 0)
+        qtd_parcelas_lance_ofertado = inputs.get('qtd_parcelas_lance_ofertado', 0)
+        opcao_diluir_lance = inputs.get('opcao_diluir_lance', 1) # Padrão para 'Sim'
+        assembleia_atual = inputs.get('assembleia_atual', 1)
         TAXA_SEGURO_AUTO = inputs['TAXA_SEGURO_AUTO']
         TAXA_SEGURO_IMOVEL = inputs['TAXA_SEGURO_IMOVEL']
 
