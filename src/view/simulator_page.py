@@ -108,11 +108,18 @@ def show():
             return
 
         with st.spinner("Calculando..."):
-            # Prepara os inputs para a função de cálculo
+            # Prepara os inputs para a função de cálculo de forma defensiva
             inputs_calculo = st.session_state.simulation_inputs.copy()
-            inputs_calculo['taxa_administracao_total'] /= 100
-            inputs_calculo['percentual_lance_ofertado'] = (inputs_calculo.get('percentual_lance_ofertado') or 0) / 100
-            inputs_calculo['percentual_lance_embutido'] = (inputs_calculo.get('percentual_lance_embutido') or 0) / 100
+            
+            # Garante que os valores numéricos sejam tratados como 0 se forem None
+            taxa_total = inputs_calculo.get('taxa_administracao_total') or 0
+            lance_ofertado = inputs_calculo.get('percentual_lance_ofertado') or 0
+            lance_embutido = inputs_calculo.get('percentual_lance_embutido') or 0
+
+            inputs_calculo['taxa_administracao_total'] = taxa_total / 100
+            inputs_calculo['percentual_lance_ofertado'] = lance_ofertado / 100
+            inputs_calculo['percentual_lance_embutido'] = lance_embutido / 100
+            
             inputs_calculo['TAXA_SEGURO_AUTO'] = config.TAXA_SEGURO_AUTO
             inputs_calculo['TAXA_SEGURO_IMOVEL'] = config.TAXA_SEGURO_IMOVEL
             
