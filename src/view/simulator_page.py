@@ -82,7 +82,7 @@ def show():
             st.session_state.simulation_inputs['opcao_plano_light'] = col1.selectbox("Plano Light", options=list(config.PLANO_LIGHT_OPTIONS.keys()), format_func=lambda x: config.PLANO_LIGHT_OPTIONS[x], index=list(config.PLANO_LIGHT_OPTIONS.keys()).index(st.session_state.simulation_inputs['opcao_plano_light']))
             st.session_state.simulation_inputs['opcao_seguro_prestamista'] = col2.selectbox("Seguro Prestamista", options=list(config.SEGURO_PRESTAMISTA_OPTIONS.keys()), format_func=lambda x: config.SEGURO_PRESTAMISTA_OPTIONS[x], index=list(config.SEGURO_PRESTAMISTA_OPTIONS.keys()).index(st.session_state.simulation_inputs['opcao_seguro_prestamista']))
 
-            st.subheader("Valores do Lance")
+            st.subheader("Valores do Lance (Opcional)")
             col1, col2, col3 = st.columns(3)
             st.session_state.simulation_inputs['percentual_lance_ofertado'] = col1.number_input("% Ofertado", value=st.session_state.simulation_inputs['percentual_lance_ofertado'], step=0.1, format="%.2f", placeholder="Ex: 30.0", min_value=0.0, max_value=100.0, key="percentual_lance_ofertado_input")
             st.session_state.simulation_inputs['percentual_lance_embutido'] = col2.number_input("% Embutido", value=st.session_state.simulation_inputs['percentual_lance_embutido'], step=0.1, format="%.2f", placeholder="Ex: 0.0", min_value=0.0, max_value=100.0, key="percentual_lance_embutido_input")
@@ -111,8 +111,8 @@ def show():
             # Prepara os inputs para a função de cálculo
             inputs_calculo = st.session_state.simulation_inputs.copy()
             inputs_calculo['taxa_administracao_total'] /= 100
-            inputs_calculo['percentual_lance_ofertado'] /= 100
-            inputs_calculo['percentual_lance_embutido'] /= 100
+            inputs_calculo['percentual_lance_ofertado'] = (inputs_calculo.get('percentual_lance_ofertado') or 0) / 100
+            inputs_calculo['percentual_lance_embutido'] = (inputs_calculo.get('percentual_lance_embutido') or 0) / 100
             inputs_calculo['TAXA_SEGURO_AUTO'] = config.TAXA_SEGURO_AUTO
             inputs_calculo['TAXA_SEGURO_IMOVEL'] = config.TAXA_SEGURO_IMOVEL
             
