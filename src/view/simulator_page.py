@@ -38,7 +38,7 @@ def initialize_session_state():
             'opcao_seguro_prestamista': last_sim.get('opcao_seguro_prestamista', defaults['opcao_seguro_prestamista']),
             'percentual_lance_ofertado': last_sim.get('percentual_lance_ofertado', defaults['percentual_lance_ofertado']) * 100,
             'percentual_lance_embutido': last_sim.get('percentual_lance_embutido', defaults['percentual_lance_embutido']) * 100,
-            'qtd_parcelas_lance_ofertado': int(last_sim.get('qtd_parcelas_lance_ofertado', defaults['qtd_parcelas_lance_ofertado'])),
+            'qtd_parcelas_lance_ofertado': int(last_sim.get('qtd_parcelas_lance_ofertado')) if last_sim.get('qtd_parcelas_lance_ofertado') is not None else defaults['qtd_parcelas_lance_ofertado'],
             'opcao_diluir_lance': last_sim.get('opcao_diluir_lance', defaults['opcao_diluir_lance']),
             'assembleia_atual': last_sim.get('assembleia_atual', defaults['assembleia_atual']),
             'cliente_nome': last_sim.get('nome_cliente', defaults['cliente_nome'])
