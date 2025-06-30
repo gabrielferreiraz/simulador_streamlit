@@ -1,5 +1,6 @@
 import streamlit as st
 import logging
+import locale
 from src.db.database import init_db
 from src.db.user_repository import add_user, get_user_by_email
 from src.auth.auth_service import hash_password
@@ -7,6 +8,17 @@ from src.utils.style_utils import apply_dark_theme, hide_main_page_from_sidebar
 
 # Configura o logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Configura a localidade para o Brasil
+try:
+    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
+except locale.Error:
+    st.error("Localidade 'pt_BR.UTF-8' não encontrada. A formatação de moeda pode não funcionar.")
+    # Tenta uma alternativa ou define um padrão seguro
+    try:
+        locale.setlocale(locale.LC_ALL, '')
+    except locale.Error:
+        pass # Mantém a localidade padrão se tudo falhar
 
 st.set_page_config(layout="centered", page_title="Simulador Servopa", page_icon="🔑")
 
