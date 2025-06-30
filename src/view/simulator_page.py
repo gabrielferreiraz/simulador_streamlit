@@ -5,13 +5,7 @@ from src.reports.pdf_generator import create_creative_pdf_to_buffer
 from src.db.simulation_repository import log_simulation, get_last_simulation_by_user
 from src.db.audit_repository import log_audit_event
 from src.config import config
-
-def format_currency(value):
-    """Formats a number as Brazilian Real currency without depending on locale."""
-    if value is None:
-        value = 0
-    # Formata o número com duas casas decimais, separador de milhar e vírgula decimal
-    return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+from src.utils.style_utils import format_currency
 
 def initialize_session_state():
     """Inicializa o st.session_state com valores padrão ou da última simulação."""
