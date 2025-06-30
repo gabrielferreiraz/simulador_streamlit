@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 
 def format_currency(value):
     """Formats a number as Brazilian Real currency without depending on locale."""
@@ -17,7 +18,10 @@ def load_css(file_path):
 
 def apply_dark_theme():
     """Aplica o tema escuro padrão da aplicação."""
-    load_css("src/styles/dark.css")
+    # Constrói o caminho absoluto para o arquivo CSS
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    css_file_path = os.path.join(script_dir, '..', 'styles', 'dark.css')
+    load_css(css_file_path)
 
 def hide_main_page_from_sidebar():
     """Injeta CSS para esconder o link para a página 'main' (login) na barra lateral."""
