@@ -1,5 +1,21 @@
 """Módulo de utilitários para estilização e formatação."""
 import re
+import streamlit as st
+
+def apply_dark_theme():
+    """Aplica um tema escuro personalizado via CSS."""
+    with open("src/styles/dark.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+def hide_main_page_from_sidebar():
+    """Oculta a página principal (main.py) da barra lateral de navegação."""
+    st.markdown("""
+        <style>
+            section[data-testid="stSidebar"] .st-emotion-cache-1v0mbdj > ul > li:first-child {
+                display: none;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
 def format_currency(value: float | None) -> str:
     """
