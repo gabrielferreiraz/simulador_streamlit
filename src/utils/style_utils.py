@@ -70,5 +70,5 @@ def sanitize_filename(filename: str) -> str:
     """Sanitiza uma string para que ela seja um nome de arquivo seguro."""
     if not isinstance(filename, str):
         filename = str(filename)
-    filename = re.sub(r'[^\w\s-.]', '', filename).strip()
+    filename = re.sub(r'[^\w\s.-]', '', filename).strip()
     return re.sub(r'[-\s]+', '_', filename)
