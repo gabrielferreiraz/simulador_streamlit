@@ -94,29 +94,45 @@ def show():
 
 
     if st.button("Gerar Simulação", type="primary", use_container_width=True):
+        sim_inputs = st.session_state.simulation_inputs
+        
+        # Validação de campos obrigatórios na UI
         required_fields = {'valor_credito': "Crédito (R$)", 'prazo_meses': "Qtd Meses", 'taxa_administracao_total': "Taxa (%)"}
-        missing_fields = [label for field, label in required_fields.items() if st.session_state.simulation_inputs.get(field) is None]
+        missing_fields = [label for field, label in required_fields.items() if sim_inputs.get(field) is None]
         if missing_fields:
             st.error(f"Por favor, preencha os campos obrigatórios: {', '.join(missing_fields)}.")
             return
 
         with st.spinner("Calculando..."):
-            inputs_calculo = st.session_state.simulation_inputs.copy()
-            
-            # Normaliza os percentuais para a função de cálculo
-            inputs_calculo['taxa_administracao_total'] = (inputs_calculo.get('taxa_administracao_total') or 0) / 100
-            inputs_calculo['percentual_lance_ofertado'] = (inputs_calculo.get('percentual_lance_ofertado') or 0) / 100
-            inputs_calculo['percentual_lance_embutido'] = (inputs_calculo.get('percentual_lance_embutido') or 0) / 100
-            
-            inputs_calculo['TAXA_SEGURO_AUTO'] = config.TAXA_SEGURO_AUTO
-            inputs_calculo['TAXA_SEGURO_IMOVEL'] = config.TAXA_SEGURO_IMOVEL
+            # Sanitiza e prepara os inputs, convertendo None para 0 antes de passar para a função de cálculo.
+            # Isso centraliza a lógica de limpeza e garante que a função de cálculo receba apenas tipos numéricos válidos.
+            inputs_calculo = {
+                'valor_credito': float(sim_inputs.get('valor_credito') or 0.0),
+                'prazo_meses': int(sim_inputs.get('prazo_meses') or 0),
+                'taxa_administracao_total': float(sim_inputs.get('taxa_administracao_total') or 0.0) / 100.0,
+                'opcao_plano_light': sim_inputs.get('opcao_plano_light', 1),
+                'opcao_seguro_prestamista': sim_inputs.get('opcao_seguro_prestamista', 0),
+                'percentual_lance_ofertado': float(sim_inputs.get('percentual_lance_ofertado') or 0.0) / 100.0,
+                'percentual_lance_embutido': float(sim_inputs.get('percentual_lance_embutido') or 0.0) / 100.0,
+                'qtd_parcelas_lance_ofertado': int(sim_inputs.get('qtd_parcelas_lance_ofertado') or 0),
+                'opcao_diluir_lance': sim_inputs.get('opcao_diluir_lance', 1),
+                'assembleia_atual': int(sim_inputs.get('assembleia_atual') or 1),
+                'TAXA_SEGURO_AUTO': config.TAXA_SEGURO_AUTO,
+                'TAXA_SEGURO_IMOVEL': config.TAXA_SEGURO_IMOVEL,
+            }
             
             resultados = realizar_calculo_simulacao(inputs_calculo)
             st.session_state.simulation_results = resultados
 
             if resultados["status"] == "success":
-                log_simulation(st.session_state["user_id"], inputs_calculo, resultados, st.session_state.simulation_inputs['cliente_nome'])
-                log_audit_event(st.session_state["user_id"], "SIMULATION_GENERATED", f"Simulation for client {st.session_state.simulation_inputs['cliente_nome']}.")
+                # Para o log, usamos os inputs originais (com percentuais) e os resultados
+                log_inputs = inputs_calculo.copy()
+                log_inputs['taxa_administracao_total'] = sim_inputs.get('taxa_administracao_total')
+                log_inputs['percentual_lance_ofertado'] = sim_inputs.get('percentual_lance_ofertado')
+                log_inputs['percentual_lance_embutido'] = sim_inputs.get('percentual_lance_embutido')
+                
+                log_simulation(st.session_state["user_id"], log_inputs, resultados, sim_inputs['cliente_nome'])
+                log_audit_event(st.session_state["user_id"], "SIMULATION_GENERATED", f"Simulation for client {sim_inputs['cliente_nome']}.")
                 st.toast("Simulação gerada e registrada com sucesso!")
             else:
                 st.error(f"Erro no cálculo: {resultados['message']}")
