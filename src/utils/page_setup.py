@@ -6,9 +6,10 @@ from src.db.user_repository import UserRepository
 from src.db.audit_repository import AuditRepository
 from src.utils.style_utils import (
     apply_dark_theme, 
-    hide_insights_link, 
-    hide_admin_link, 
-    hide_all_pages_except_login
+    hide_insights_link_for_consultor, 
+    hide_admin_link_for_consultor, 
+    hide_all_pages_except_login,
+    hide_main_page_from_sidebar
 )
 from src.config import config as cfg
 
@@ -35,8 +36,8 @@ def setup_page(page_title: str, page_icon: str, hide_sidebar: bool = False):
     # Esconde links da barra lateral com base no cargo do usuário
     user_role = st.session_state.get(cfg.SESSION_STATE_USER_ROLE)
     if user_role == cfg.ROLE_CONSULTOR:
-        hide_insights_link()
-        hide_admin_link()
+        hide_insights_link_for_consultor()
+        hide_admin_link_for_consultor()
 
     # Inicializa o estado para o logout
     if cfg.SESSION_STATE_DO_LOGOUT not in st.session_state:

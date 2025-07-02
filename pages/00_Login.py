@@ -3,6 +3,8 @@ from src.auth.auth_service import AuthService
 from src.db import get_db
 from src.db.user_repository import UserRepository
 from src.db.audit_repository import AuditRepository
+from src.schemas.auth import LoginInput # Importa o esquema Pydantic
+from pydantic import ValidationError # Importa ValidationError
 
 # Configuração da página deve ser a primeira chamada do Streamlit
 st.set_page_config(page_title="Login", page_icon="🔑", layout="centered")
@@ -37,22 +39,23 @@ def login_page():
         submitted = st.form_submit_button("Entrar", use_container_width=True)
 
         if submitted:
-            # Validação de front-end antes de chamar o serviço de autenticação
-            if not email or not password:
-                st.error("Por favor, preencha os campos de e-mail e senha.")
-                return
+            login_data = {"email": email, "password": password}
+            try:
+                # Valida os dados com Pydantic
+                validated_login_data = LoginInput(**login_data)
 
-            with get_db() as db:
-                success, message = auth_service.login_user(db, email, password)
-                if success:
-                    # O redirecionamento é feito dentro da função de login bem-sucedido
-                    # para garantir que o estado da sessão seja definido antes da troca de página.
-                    st.success("Login bem-sucedido! Redirecionando...")
-                    st.switch_page("pages/simulador.py")
-                    st.stop()
-                else:
-                    # Exibe a mensagem de erro genérica retornada pelo serviço
-                    st.error(message)
+                with get_db() as db:
+                    success, message = auth_service.login_user(db, validated_login_data.email, validated_login_data.password)
+                    if success:
+                        st.success("Login bem-sucedido! Redirecionando...")
+                        st.switch_page("pages/simulador.py")
+                        st.stop()
+                    else:
+                        st.error(message)
+            except ValidationError as e:
+                st.error(f"Erro de validação: {e}")
+            except Exception as e:
+                st.error(f"Ocorreu um erro inesperado: {e}")
 
 # Renderiza a página de login
 login_page()
