@@ -23,7 +23,11 @@ class User(Base):
     team_id = Column(Integer, ForeignKey('teams.id', ondelete='SET NULL'))
     password = Column(String, nullable=False) # Armazenará o hash da senha
 
-    team = relationship("Team", back_populates="users")
+    # Relação com Team: um usuário pertence a uma equipe
+    team = relationship("Team", back_populates="users", foreign_keys=[team_id])
+    # Relação com Team: um usuário pode ser supervisor de uma equipe
+    supervised_teams = relationship("Team", back_populates="supervisor", foreign_keys='Team.supervisor_id')
+
     simulations = relationship("Simulation", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
 
@@ -37,8 +41,10 @@ class Team(Base):
     name = Column(String, nullable=False, unique=True)
     supervisor_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'))
 
-    users = relationship("User", back_populates="team")
-    supervisor = relationship("User", foreign_keys=[supervisor_id])
+    # Relação com User: uma equipe tem vários usuários
+    users = relationship("User", back_populates="team", foreign_keys='User.team_id')
+    # Relação com User: uma equipe tem um supervisor
+    supervisor = relationship("User", back_populates="supervised_teams", foreign_keys=[supervisor_id])
 
     def __repr__(self):
         return f"<Team(id={self.id}, name='{self.name}')>"

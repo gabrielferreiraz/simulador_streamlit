@@ -9,6 +9,8 @@ Isso mantém a UI limpa e focada na apresentação, enquanto a lógica de negóc
 import logging
 from typing import List, Optional
 
+import streamlit as st # Importar streamlit para usar st.cache_data.clear()
+
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
@@ -19,6 +21,11 @@ from src.db.team_repository import TeamRepository
 from src.db.audit_repository import AuditRepository
 from src.db.data_models import UserStats, TeamWithSupervisor # Dataclasses para retorno de dados
 from src.schemas.user import UserCreate, UserUpdate # Importa os esquemas Pydantic
+from src.utils.cached_data import (
+    get_cached_all_users_with_team_info,
+    get_cached_all_teams_with_supervisor_info,
+    get_cached_available_supervisors
+) # Importa as funções cacheadas para invalidá-las
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +65,11 @@ class AdminService:
             foto_bytes=None # A foto será tratada separadamente na view
         )
         self.audit_repo.log_event(db, "USER_CREATED", details=f"User '{user_data.nome}' (ID: {user.id}) created.")
+        
+        # Invalida o cache de usuários e supervisores
+        get_cached_all_users_with_team_info.clear()
+        get_cached_available_supervisors.clear()
+        
         return user
 
     def update_user(self, db: Session, user_id: int, user_data: UserUpdate, foto_bytes: Optional[bytes] = None):
@@ -76,11 +88,19 @@ class AdminService:
             
         self.user_repo.update(db, user)
         self.audit_repo.log_event(db, "USER_UPDATED", details=f"User '{user.nome}' (ID: {user.id}) updated.")
+        
+        # Invalida o cache de usuários e supervisores
+        get_cached_all_users_with_team_info.clear()
+        get_cached_available_supervisors.clear()
 
     def delete_user(self, db: Session, user_id: int):
         """Deleta um usuário."""
         self.user_repo.delete(db, user_id)
         self.audit_repo.log_event(db, "USER_DELETED", details=f"User ID {user_id} deleted.")
+        
+        # Invalida o cache de usuários e supervisores
+        get_cached_all_users_with_team_info.clear()
+        get_cached_available_supervisors.clear()
 
     # --- Operações de Equipe ---
 
@@ -104,13 +124,25 @@ class AdminService:
         """Cria uma nova equipe."""
         team = self.team_repo.create(db, name, supervisor_id)
         self.audit_repo.log_event(db, "TEAM_CREATED", details=f"Team '{name}' (ID: {team.id}) created.")
+        
+        # Invalida o cache de equipes e supervisores
+        get_cached_all_teams_with_supervisor_info.clear()
+        get_cached_available_supervisors.clear()
 
     def update_team_members(self, db: Session, team_id: int, member_ids: List[int]):
         """Atualiza os membros de uma equipe."""
         self.team_repo.update_members(db, team_id, member_ids)
         self.audit_repo.log_event(db, "TEAM_MEMBERS_UPDATED", details=f"Members for team ID {team_id} updated.")
+        
+        # Invalida o cache de equipes e usuários (pois team_id de usuários pode ter mudado)
+        get_cached_all_teams_with_supervisor_info.clear()
+        get_cached_all_users_with_team_info.clear()
 
     def delete_team(self, db: Session, team_id: int):
         """Deleta uma equipe."""
         self.team_repo.delete(db, team_id)
         self.audit_repo.log_event(db, "TEAM_DELETED", details=f"Team ID {team_id} deleted.")
+        
+        # Invalida o cache de equipes e usuários (pois team_id de usuários pode ter sido SET NULL)
+        get_cached_all_teams_with_supervisor_info.clear()
+        get_cached_all_users_with_team_info.clear()

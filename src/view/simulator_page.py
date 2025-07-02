@@ -22,6 +22,13 @@ from src.db.audit_repository import AuditRepository
 from src.config import config
 from src.reports.pdf_generator import create_creative_pdf_to_buffer
 from src.utils.style_utils import format_currency, sanitize_filename
+from src.utils.cached_data import (
+    get_cached_general_metrics,
+    get_cached_simulations_per_day,
+    get_cached_credit_distribution,
+    get_cached_simulations_by_consultant,
+    get_cached_team_simulation_stats
+) # Importa as funções cacheadas para invalidá-las
 
 from sqlalchemy.exc import SQLAlchemyError, NoResultFound, IntegrityError # Exceções do SQLAlchemy
 
@@ -106,6 +113,14 @@ class SimulatorPageService:
             self.audit_repo.log_event(db, "SIMULATION_GENERATED", user_id, f"Cliente: {form_inputs['cliente_nome']}")
             
             st.toast("Simulação gerada e registrada com sucesso!")
+
+            # Invalida o cache de métricas relacionadas a simulações
+            get_cached_general_metrics.clear()
+            get_cached_simulations_per_day.clear()
+            get_cached_credit_distribution.clear()
+            get_cached_simulations_by_consultant.clear()
+            get_cached_team_simulation_stats.clear()
+
             return result
 
         except (InvalidInputError, ValueError, CalculationError) as e:
