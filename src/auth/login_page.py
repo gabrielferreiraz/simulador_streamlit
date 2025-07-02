@@ -28,7 +28,7 @@ def login_page():
         email = st.text_input(
             "E-mail", 
             key="login_email",
-            placeholder="seu.email@servopa.com.br"
+            placeholder="seu.email@reoboteconsorcios.com.br"
         )
         password = st.text_input(
             "Senha", 

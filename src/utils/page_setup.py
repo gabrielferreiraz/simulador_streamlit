@@ -29,13 +29,6 @@ def setup_page(page_title: str, page_icon: str, hide_sidebar: bool = False):
     audit_repo = AuditRepository()
     auth_service = AuthService(user_repo, audit_repo)
 
-    # A verificação de autenticação foi movida para main.py
-    # if not auth_service.check_password():
-    #     st.warning("Por favor, faça o login para acessar esta página.")
-    #     st.page_link("pages/00_Login.py", label="Ir para a página de Login", icon="🏠")
-    #     hide_all_pages_except_login()
-    #     st.stop()
-
     # Esconde links da barra lateral com base no cargo do usuário
     user_role = st.session_state.get(cfg.SESSION_STATE_USER_ROLE)
     if user_role == cfg.ROLE_CONSULTOR:

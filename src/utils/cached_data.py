@@ -8,6 +8,7 @@ para garantir que o cache funcione corretamente.
 """
 import streamlit as st
 from typing import List, Optional
+import pandas as pd # Importa pandas
 
 from sqlalchemy.orm import Session
 
