@@ -16,7 +16,9 @@ from src.config import config as cfg
 def setup_page(page_title: str, page_icon: str, hide_sidebar: bool = False):
     """
     Configura uma página padrão da aplicação.
-    Isso inclui o título, ícone, tema, verificação de autenticação e a barra lateral.
+    Isso inclui o título, ícone, tema e a barra lateral.
+    A verificação de autenticação é feita no main.py para garantir que apenas
+    a página de login seja acessível antes da autenticação.
     """
     st.set_page_config(layout="wide", page_title=page_title, page_icon=page_icon)
     apply_dark_theme()
@@ -27,11 +29,12 @@ def setup_page(page_title: str, page_icon: str, hide_sidebar: bool = False):
     audit_repo = AuditRepository()
     auth_service = AuthService(user_repo, audit_repo)
 
-    if not auth_service.check_password():
-        st.warning("Por favor, faça o login para acessar esta página.")
-        st.page_link("pages/00_Login.py", label="Ir para a página de Login", icon="🏠")
-        hide_all_pages_except_login()
-        st.stop()
+    # A verificação de autenticação foi movida para main.py
+    # if not auth_service.check_password():
+    #     st.warning("Por favor, faça o login para acessar esta página.")
+    #     st.page_link("pages/00_Login.py", label="Ir para a página de Login", icon="🏠")
+    #     hide_all_pages_except_login()
+    #     st.stop()
 
     # Esconde links da barra lateral com base no cargo do usuário
     user_role = st.session_state.get(cfg.SESSION_STATE_USER_ROLE)
