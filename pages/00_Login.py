@@ -15,9 +15,9 @@ user_repo = UserRepository()
 audit_repo = AuditRepository()
 auth_service = AuthService(user_repo, audit_repo)
 
-# Se o usuário já está autenticado, redireciona para a página principal
-if auth_service.check_password():
-    st.switch_page("pages/simulador.py")
+# A verificação de autenticação e redirecionamento agora é feita em main.py
+# if auth_service.check_password():
+#     st.switch_page("pages/simulador.py")
 
 def login_page():
     """Renderiza a página e o formulário de login."""
@@ -48,9 +48,11 @@ def login_page():
                     success, message = auth_service.login_user(db, validated_login_data.email, validated_login_data.password)
                     if success:
                         st.success("Login bem-sucedido! Redirecionando...")
+                        # O redirecionamento agora é feito pelo main.py após o login
                         st.switch_page("pages/simulador.py")
                         st.stop()
                     else:
+                        # Exibe a mensagem de erro genérica retornada pelo serviço
                         st.error(message)
             except ValidationError as e:
                 st.error(f"Erro de validação: {e}")
