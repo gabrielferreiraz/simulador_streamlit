@@ -63,3 +63,12 @@ class SimulationResult:
     percentual_lance_recurso_proprio: float
     # Adiciona os inputs para facilitar o log
     inputs: SimulationInput = field(repr=False)
+
+
+@dataclass
+class TeamWithSupervisor:
+    """Representa uma equipe com o nome do seu supervisor."""
+    id: int
+    name: str
+    supervisor_id: Optional[int] = None
+    supervisor_name: Optional[str] = None
