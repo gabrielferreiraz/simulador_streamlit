@@ -1,157 +1,115 @@
 """
-Módulo da view para a aba de Gerenciamento de Equipes no painel de administração.
+Refatorado: Módulo da view para Gerenciamento de Equipes.
+
+Seguindo o mesmo padrão da view de usuários, esta interface é declarativa
+e delega toda a lógica para o AdminService. Ela é responsável apenas por
+renderizar os formulários e tabelas, e exibir os resultados ou erros
+fornecidos pelo serviço, resultando em um código de UI limpo e de fácil manutenção.
 """
 import streamlit as st
-from typing import Dict, Any
+import pandas as pd
 
-from src.db import team_repository as team_repo, user_repository as user_repo
-from src.db.audit_repository import log_audit_event
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, NoResultFound, SQLAlchemyError
 
-# --- Funções de Segurança e Permissão ---
+from src.view.admin.admin_service import AdminService
+from src.utils.cached_data import get_cached_all_users_with_team_info, get_cached_available_supervisors, get_cached_all_teams_with_supervisor_info
 
-def can_manage_team(manager_role: str, manager_team_id: int, target_team_id: int) -> bool:
-    """Verifica se o usuário logado pode gerenciar a equipe alvo."""
-    if manager_role == "Admin":
-        return True
-    if manager_role == "Supervisor":
-        return manager_team_id == target_team_id
-    return False
+def show_team_management(service: AdminService, db: Session):
+    """Renderiza a UI para gerenciamento de equipes."""
+    st.header("Gerenciamento de Equipes")
 
-# --- Renderização Principal ---
+    try:
+        # Usa funções cacheadas para leitura de dados
+        all_users = get_cached_all_users_with_team_info()
+        available_supervisors = get_cached_available_supervisors()
+    except SQLAlchemyError as e:
+        st.error(f"Erro ao carregar dados de usuários e equipes: {e}")
+        return
 
-def show():
-    """Renderiza a aba de gerenciamento de equipes com controle de acesso."""
-    st.subheader("Gerenciamento de Equipes")
-    
-    manager_role = st.session_state.get("user_role")
-    
-    if manager_role == "Admin":
-        st.info("Crie e gerencie equipes, atribuindo supervisores e membros.")
-        with st.expander("Criar Nova Equipe", expanded=False):
-            render_create_team_form()
-        st.divider()
+    # --- Formulário para Criar Nova Equipe ---
+    with st.expander("Criar Nova Equipe", expanded=False):
+        with st.form("new_team_form", clear_on_submit=True):
+            team_name = st.text_input("Nome da Equipe")
+            supervisor_options = {user.id: user.nome for user in available_supervisors}
+            selected_supervisor_id = st.selectbox("Selecione um Supervisor", options=list(supervisor_options.keys()), format_func=lambda x: supervisor_options[x])
 
-    st.subheader("Lista de Equipes")
-    teams_df = team_repo.get_all_teams()
-    
-    if teams_df.empty:
-        st.info("Nenhuma equipe cadastrada."); return
+            submitted = st.form_submit_button("Criar Equipe")
+            if submitted:
+                if not team_name or not selected_supervisor_id:
+                    st.error("Nome da equipe e supervisor são obrigatórios.")
+                else:
+                    try:
+                        service.create_team(db, team_name, selected_supervisor_id)
+                        st.success(f"Equipe '{team_name}' criada com sucesso!")
+                        st.rerun()
+                    except IntegrityError as e:
+                        st.error(f"Erro ao criar equipe: O nome da equipe já existe. Detalhes: {e}")
+                    except NoResultFound as e:
+                        st.error(f"Erro ao criar equipe: {e}")
+                    except SQLAlchemyError as e:
+                        st.error(f"Erro de banco de dados ao criar equipe: {e}")
 
-    # Filtra as equipes que o usuário pode ver
-    if manager_role == "Supervisor":
-        user_data = user_repo.get_user_by_id(st.session_state.get("user_id"))
-        teams_df = teams_df[teams_df['id'] == user_data['team_id']]
-        if teams_df.empty:
-            st.warning("Você não está associado a nenhuma equipe."); return
-    
-    st.dataframe(teams_df, use_container_width=True, hide_index=True)
     st.divider()
-    
-    st.subheader("Gerenciar Membros da Equipe")
-    render_manage_team_members_section(teams_df)
 
-# --- Sub-componentes de Renderização ---
+    # --- Lista de Equipes ---
+    st.subheader("Equipes Formadas")
+    try:
+        # Usa função cacheada para obter as equipes
+        teams = get_cached_all_teams_with_supervisor_info()
+        if not teams:
+            st.info("Nenhuma equipe formada.")
+            return
 
-def render_create_team_form():
-    """Renderiza o formulário para criar uma nova equipe (apenas para Admins)."""
-    all_users = user_repo.get_all_users()
-    # Supervisores disponíveis são aqueles com o cargo e que ainda não supervisionam uma equipe
-    existing_supervisor_ids = team_repo.get_all_teams()['supervisor_id'].dropna().unique()
-    supervisors_df = all_users[(all_users['role'] == 'Supervisor') & (~all_users['id'].isin(existing_supervisor_ids))]
-    
-    if supervisors_df.empty:
-        st.warning("Não há supervisores disponíveis. Crie um usuário 'Supervisor' que não esteja em outra equipe."); return
+        # Converte os objetos TeamWithSupervisor (dataclass) para dicionários para o DataFrame
+        teams_data = []
+        for team in teams:
+            teams_data.append(team.__dict__)
 
-    with st.form("add_team_form", clear_on_submit=True):
-        new_team_name = st.text_input("Nome da Equipe")
-        supervisor_options = {row['id']: row['nome'] for _, row in supervisors_df.iterrows()}
-        selected_supervisor_id = st.selectbox("Selecionar Supervisor", options=list(supervisor_options.keys()), format_func=lambda x: supervisor_options.get(x), index=None)
-        
-        if st.form_submit_button("Criar Equipe"):
-            if not all([new_team_name, selected_supervisor_id]):
-                st.warning("Nome da equipe e supervisor são obrigatórios."); return
+        df_teams = pd.DataFrame(teams_data)
+        df_teams_display = df_teams[['id', 'name', 'supervisor_name']]
+        df_teams_display.rename(columns={'id': 'ID', 'name': 'Nome da Equipe', 'supervisor_name': 'Supervisor'}, inplace=True)
+        st.dataframe(df_teams_display, use_container_width=True, hide_index=True)
+
+        # --- Ações de Gerenciamento de Equipe ---
+        st.subheader("Gerenciar Membros e Excluir Equipe")
+        team_options = {team.id: team.name for team in teams}
+        selected_team_id = st.selectbox("Selecione uma equipe para gerenciar", options=list(team_options.keys()), format_func=lambda x: team_options[x])
+
+        if selected_team_id:
+            # Filtra usuários que podem ser membros (não são supervisores de outras equipes)
+            # all_users já foi carregado no início da função
+            assigned_supervisor_ids = {team.supervisor_id for team in teams if team.id != selected_team_id}
+            available_members = [user for user in all_users if user.id not in assigned_supervisor_ids or (user.team_id == selected_team_id and user.id != df_teams.loc[df_teams['id'] == selected_team_id, 'supervisor_id'].values[0])]
+            member_options = {user.id: user.nome for user in available_members}
             
-            success, message = team_repo.create_team(new_team_name, selected_supervisor_id)
-            if success:
-                st.success(message)
-                log_audit_event(st.session_state.get("user_id"), "TEAM_CREATED", f"Team {new_team_name} created.")
-                st.rerun()
-            else:
-                st.error(message)
+            # Filtra membros que já estão na equipe selecionada
+            current_member_ids = [user.id for user in all_users if user.team_id == selected_team_id and user.id != df_teams.loc[df_teams['id'] == selected_team_id, 'supervisor_id'].values[0]]
 
-def render_manage_team_members_section(teams_df):
-    """Renderiza a seção para editar ou deletar uma equipe."""
-    team_options = {row['id']: row['name'] for _, row in teams_df.iterrows()}
-    selected_team_id = st.selectbox("Selecione uma equipe para gerenciar", options=list(team_options.keys()), index=None)
+            with st.form(f"manage_team_{selected_team_id}"):
+                st.write(f"Editando membros da equipe: **{team_options[selected_team_id]}**")
+                selected_member_ids = st.multiselect("Membros da Equipe", options=list(member_options.keys()), format_func=lambda x: member_options[x], default=current_member_ids)
+                
+                col1, col2 = st.columns([1, 5])
+                if col1.form_submit_button("Salvar Membros"):
+                    try:
+                        service.update_team_members(db, selected_team_id, selected_member_ids)
+                        st.success("Membros da equipe atualizados com sucesso!")
+                        st.rerun()
+                    except NoResultFound as e:
+                        st.error(f"Erro ao atualizar membros: {e}")
+                    except SQLAlchemyError as e:
+                        st.error(f"Erro de banco de dados ao atualizar membros: {e}")
 
-    if not selected_team_id:
-        return
+                if col2.form_submit_button("Excluir Equipe", type="primary"):
+                    try:
+                        service.delete_team(db, selected_team_id)
+                        st.success("Equipe excluída com sucesso!")
+                        st.rerun()
+                    except NoResultFound as e:
+                        st.error(f"Erro ao excluir equipe: {e}")
+                    except SQLAlchemyError as e:
+                        st.error(f"Erro de banco de dados ao excluir equipe: {e}")
 
-    manager_role = st.session_state.get("user_role")
-    manager_team_id = user_repo.get_user_by_id(st.session_state.get("user_id"))['team_id']
-
-    if not can_manage_team(manager_role, manager_team_id, selected_team_id):
-        st.error("Acesso negado. Você não tem permissão para gerenciar esta equipe.")
-        return
-
-    if st.session_state.get('confirming_delete_team') == selected_team_id:
-        render_delete_confirmation(selected_team_id, team_options[selected_team_id])
-    else:
-        render_edit_team_form(selected_team_id, teams_df)
-
-def render_delete_confirmation(team_id, team_name):
-    with st.warning(f"**Atenção!** Você está prestes a deletar a equipe **{team_name}**. Os membros ficarão sem equipe. Esta ação é irreversível."):
-        col1, col2 = st.columns(2)
-        col1.button("Confirmar Deleção da Equipe", on_click=handle_team_delete, args=(team_id, team_name), use_container_width=True, type="primary")
-        col2.button("Cancelar", on_click=lambda: st.session_state.update(confirming_delete_team=None), use_container_width=True)
-
-def render_edit_team_form(team_id, teams_df):
-    with st.form(f"edit_team_members_form_{team_id}"):
-        users_df = user_repo.get_all_users()
-        # Membros disponíveis são consultores sem equipe ou que já estão nesta equipe
-        available_members_df = users_df[(users_df['role'] == 'Consultor') & (users_df['team_id'].isna() | (users_df['team_id'] == team_id))]
-        member_options = {row['id']: row['nome'] for _, row in available_members_df.iterrows()}
-        
-        current_member_ids = users_df[users_df['team_id'] == team_id]['id'].tolist()
-        # O supervisor da equipe não deve ser listado como um membro selecionável
-        supervisor_id = teams_df.loc[teams_df['id'] == team_id, 'supervisor_id'].iloc[0]
-        current_member_ids = [mid for mid in current_member_ids if mid != supervisor_id]
-
-        selected_member_ids = st.multiselect("Selecionar Membros (Consultores)", options=list(member_options.keys()), default=current_member_ids, format_func=lambda x: member_options.get(x))
-        
-        col_buttons_team = st.columns(2)
-        update_submitted = col_buttons_team[0].form_submit_button("Atualizar Membros", use_container_width=True)
-        
-        # Apenas Admins podem deletar equipes
-        delete_visible = st.session_state.get("user_role") == "Admin"
-        delete_submitted = False
-        if delete_visible:
-            delete_submitted = col_buttons_team[1].form_submit_button("Deletar Equipe", type="primary", use_container_width=True)
-
-        if update_submitted:
-            handle_team_update(team_id, selected_member_ids, team_options[team_id])
-        if delete_submitted:
-            st.session_state.confirming_delete_team = team_id
-            st.rerun()
-
-# --- Funções de Manipulação (Handlers) ---
-
-def handle_team_update(team_id, member_ids, team_name):
-    success, message = team_repo.update_team_members(team_id, member_ids)
-    if success:
-        st.success(message)
-        log_audit_event(st.session_state.get("user_id"), "TEAM_MEMBERS_UPDATED", f"Team {team_name} members updated.")
-        st.rerun()
-    else:
-        st.error(message)
-
-def handle_team_delete(team_id, team_name):
-    success, message = team_repo.delete_team(team_id)
-    if success:
-        st.success(message)
-        log_audit_event(st.session_state.get("user_id"), "TEAM_DELETED", f"Team {team_name} ({team_id}) deleted.")
-        st.session_state.confirming_delete_team = None
-        st.rerun()
-    else:
-        st.error(message)
-
+    except SQLAlchemyError as e:
+        st.error(f"Não foi possível carregar as equipes: {e}")

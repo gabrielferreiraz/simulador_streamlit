@@ -1,233 +1,207 @@
 """
-Módulo de repositório para todas as operações de banco de dados relacionadas a usuários.
+Refatorado: Módulo de repositório para operações de usuários usando SQLAlchemy.
+
+Este repositório agora interage com o banco de dados através do ORM SQLAlchemy,
+utilizando objetos de sessão para todas as operações. Ele retorna instâncias
+dos modelos SQLAlchemy diretamente, e lida com as exceções do SQLAlchemy,
+proporcionando uma camada de acesso a dados mais robusta e orientada a objetos.
 """
-import sqlite3
-import pandas as pd
 import logging
-from typing import List, Tuple, Optional, Any, Dict
+from typing import List, Optional
 
-from .database import get_db_connection
+from sqlalchemy.orm import Session
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError, NoResultFound
 
-# Configura o logger para este módulo
+from src.db.models import User, Team, Simulation # Importa os modelos SQLAlchemy
+from src.db.data_models import UserStats # Dataclass que ainda é usado para retorno de estatísticas
+
 logger = logging.getLogger(__name__)
 
-def add_user(
-    nome: str,
-    tipo_consultor: str,
-    telefone: str,
-    email: str,
-    foto_bytes: Optional[bytes],
-    role: str,
-    password_hash: str
-) -> Tuple[bool, str]:
-    """
-    Adiciona um novo usuário ao banco de dados.
+class UserRepository:
+    """Gerencia todas as operações de banco de dados para a entidade User."""
 
-    Args:
-        nome (str): Nome do usuário.
-        tipo_consultor (str): Tipo de consultor (e.g., "Interno", "Externo").
-        telefone (str): Telefone de contato.
-        email (str): E-mail do usuário (deve ser único).
-        foto_bytes (Optional[bytes]): Foto do usuário como bytes.
-        role (str): Papel do usuário ('Admin', 'Supervisor', 'Consultor').
-        password_hash (str): Hash da senha do usuário.
+    def add(
+        self,
+        db: Session,
+        nome: str,
+        email: str,
+        password_hash: str,
+        role: str,
+        tipo_consultor: Optional[str] = None,
+        telefone: Optional[str] = None,
+        foto_bytes: Optional[bytes] = None,
+    ) -> User:
+        """
+        Adiciona um novo usuário ao banco de dados.
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    if not all([nome, email, password_hash, role]):
-        return False, "Nome, e-mail, senha e papel são campos obrigatórios."
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            nome (str): Nome do usuário.
+            email (str): E-mail do usuário (deve ser único).
+            password_hash (str): Hash da senha do usuário.
+            role (str): Papel do usuário ('Admin', 'Supervisor', 'Consultor').
+            tipo_consultor (Optional[str]): Tipo de consultor (e.g., "Interno", "Externo").
+            telefone (Optional[str]): Telefone de contato.
+            foto_bytes (Optional[bytes]): Foto do usuário como bytes.
 
-    sql = "INSERT INTO users (nome, tipo_consultor, telefone, email, foto, role, password) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    params = (nome, tipo_consultor, telefone, email, foto_bytes, role, password_hash)
-    
-    try:
-        with get_db_connection() as con:
-            con.execute(sql, params)
-            con.commit()
-        logger.info(f"Usuário '{nome}' (role: {role}) adicionado com sucesso.")
-        return True, "Usuário adicionado com sucesso!"
-    except sqlite3.IntegrityError:
-        logger.warning(f"Falha ao adicionar usuário. Nome '{nome}' ou e-mail '{email}' já existem.")
-        return False, f"Erro: O nome de usuário '{nome}' ou e-mail '{email}' já existe."
-    except sqlite3.Error as e:
-        logger.error(f"Erro de banco de dados ao adicionar usuário '{nome}': {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao adicionar o usuário."
+        Returns:
+            User: O objeto User criado.
 
-def get_all_users() -> pd.DataFrame:
-    """
-    Busca todos os usuários e informações de suas equipes para exibição no painel de admin.
+        Raises:
+            IntegrityError: Se o nome ou e-mail já existirem.
+        """
+        new_user = User(
+            nome=nome,
+            tipo_consultor=tipo_consultor,
+            telefone=telefone,
+            email=email,
+            foto=foto_bytes,
+            role=role,
+            password=password_hash
+        )
+        try:
+            db.add(new_user)
+            db.flush() # Garante que o ID seja gerado antes do commit
+            logger.info(f"Usuário '{nome}' (ID: {new_user.id}) adicionado com sucesso.")
+            return new_user
+        except IntegrityError as e:
+            logger.warning(f"Falha ao adicionar usuário. Conflito de integridade para nome '{nome}' ou e-mail '{email}'.")
+            raise e # Re-lança a exceção do SQLAlchemy
 
-    Returns:
-        pd.DataFrame: Um DataFrame com os dados dos usuários ou um DataFrame vazio em caso de erro.
-    """
-    sql = """
-        SELECT u.id, u.nome, u.role, u.tipo_consultor, u.team_id, t.name as team_name 
-        FROM users u 
-        LEFT JOIN teams t ON u.team_id = t.id 
-        ORDER BY u.nome
-    """
-    try:
-        with get_db_connection() as con:
-            df = pd.read_sql_query(sql, con)
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        logger.error(f"Falha ao buscar todos os usuários: {e}", exc_info=True)
-        return pd.DataFrame()
+    def get_all_with_team_info(self, db: Session) -> List[User]:
+        """
+        Busca todos os usuários com informações de suas equipes.
 
-def get_user_by_id(user_id: int) -> Optional[sqlite3.Row]:
-    """
-    Busca um usuário específico pelo seu ID.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
 
-    Args:
-        user_id (int): O ID do usuário.
+        Returns:
+            List[User]: Uma lista de objetos User, com a relação `team` carregada.
+        """
+        # Carrega a relação 'team' para evitar N+1 queries
+        stmt = select(User).order_by(User.nome).options(selectinload(User.team))
+        users = db.execute(stmt).scalars().all()
+        return users
 
-    Returns:
-        Optional[sqlite3.Row]: Um objeto Row com os dados do usuário ou None se não for encontrado ou em caso de erro.
-    """
-    sql = "SELECT * FROM users WHERE id = ?"
-    try:
-        with get_db_connection() as con:
-            user_data = con.execute(sql, (user_id,)).fetchone()
-        return user_data
-    except sqlite3.Error as e:
-        logger.error(f"Falha ao buscar usuário por ID ({user_id}): {e}", exc_info=True)
-        return None
+    def get_by_id(self, db: Session, user_id: int) -> User:
+        """
+        Busca um usuário pelo ID.
 
-def get_user_by_email(email: str) -> Optional[sqlite3.Row]:
-    """
-    Busca um usuário específico pelo seu e-mail.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            user_id (int): O ID do usuário.
 
-    Args:
-        email (str): O e-mail do usuário.
+        Returns:
+            User: O objeto User encontrado.
 
-    Returns:
-        Optional[sqlite3.Row]: Um objeto Row com os dados do usuário ou None se não for encontrado ou em caso de erro.
-    """
-    if not email:
-        return None
-    sql = "SELECT * FROM users WHERE email = ?"
-    try:
-        with get_db_connection() as con:
-            user_data = con.execute(sql, (email,)).fetchone()
-        return user_data
-    except sqlite3.Error as e:
-        logger.error(f"Falha ao buscar usuário por e-mail ({email}): {e}", exc_info=True)
-        return None
+        Raises:
+            NoResultFound: Se o usuário não for encontrado.
+        """
+        stmt = select(User).where(User.id == user_id)
+        user = db.execute(stmt).scalar_one_or_none()
+        if user is None:
+            raise NoResultFound(f"Usuário com ID {user_id} não encontrado.")
+        return user
 
-def update_user(
-    user_id: int,
-    nome: str,
-    tipo: str,
-    telefone: str,
-    email: str,
-    foto_bytes: Optional[bytes],
-    role: str,
-    password_hash: Optional[str] = None
-) -> Tuple[bool, str]:
-    """
-    Atualiza os dados de um usuário existente.
+    def get_by_email(self, db: Session, email: str) -> User:
+        """
+        Busca um usuário pelo e-mail.
 
-    Args:
-        user_id (int): ID do usuário a ser atualizado.
-        nome (str): Novo nome.
-        tipo (str): Novo tipo de consultor.
-        telefone (str): Novo telefone.
-        email (str): Novo e-mail.
-        foto_bytes (Optional[bytes]): Novos bytes da foto, ou None para não alterar.
-        role (str): Novo papel.
-        password_hash (Optional[str]): Novo hash de senha, ou None para não alterar.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            email (str): O e-mail do usuário.
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    sql_parts = ["nome=?", "tipo_consultor=?", "telefone=?", "email=?", "role=?"]
-    params: List[Any] = [nome, tipo, telefone, email, role]
+        Returns:
+            User: O objeto User encontrado.
 
-    if foto_bytes is not None:
-        sql_parts.append("foto=?")
-        params.append(foto_bytes)
-    if password_hash:
-        sql_parts.append("password=?")
-        params.append(password_hash)
-    
-    params.append(user_id)
-    sql = f"UPDATE users SET {', '.join(sql_parts)} WHERE id=?"
+        Raises:
+            NoResultFound: Se o usuário não for encontrado.
+        """
+        stmt = select(User).where(User.email == email)
+        user = db.execute(stmt).scalar_one_or_none()
+        if user is None:
+            raise NoResultFound(f"Usuário com e-mail {email} não encontrado.")
+        return user
 
-    try:
-        with get_db_connection() as con:
-            con.execute(sql, tuple(params))
-            con.commit()
-        logger.info(f"Usuário ID {user_id} ({nome}) atualizado com sucesso.")
-        return True, "Usuário atualizado com sucesso!"
-    except sqlite3.IntegrityError:
-        logger.warning(f"Falha ao atualizar usuário ID {user_id}. Nome '{nome}' ou e-mail '{email}' já existem.")
-        return False, f"Erro: O nome de usuário '{nome}' ou e-mail '{email}' já existe."
-    except sqlite3.Error as e:
-        logger.error(f"Erro de banco de dados ao atualizar usuário ID {user_id}: {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao atualizar o usuário."
+    def update(self, db: Session, user: User) -> User:
+        """
+        Atualiza os dados de um usuário existente a partir de um objeto User.
 
-def delete_user(user_id: int) -> Tuple[bool, str]:
-    """
-    Deleta um usuário do sistema.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            user (User): O objeto User com os dados atualizados. O ID deve estar presente.
 
-    Args:
-        user_id (int): O ID do usuário a ser deletado.
+        Returns:
+            User: O objeto User atualizado.
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    sql = "DELETE FROM users WHERE id = ?"
-    try:
-        with get_db_connection() as con:
-            cur = con.execute(sql, (user_id,))
-            con.commit()
-            if cur.rowcount == 0:
-                logger.warning(f"Tentativa de deletar usuário ID {user_id}, mas o usuário não foi encontrado.")
-                return False, "Usuário não encontrado."
+        Raises:
+            NoResultFound: Se o usuário a ser atualizado não existir.
+            IntegrityError: Se a atualização violar uma restrição de unicidade.
+        """
+        existing_user = db.get(User, user.id)
+        if existing_user is None:
+            raise NoResultFound(f"Usuário com ID {user.id} não encontrado para atualização.")
+
+        try:
+            # Atualiza os atributos do objeto existente
+            existing_user.nome = user.nome
+            existing_user.tipo_consultor = user.tipo_consultor
+            existing_user.telefone = user.telefone
+            existing_user.email = user.email
+            existing_user.foto = user.foto
+            existing_user.role = user.role
+            existing_user.password = user.password # Assume que o hash já foi feito se a senha mudou
+            existing_user.team_id = user.team_id
+
+            db.flush() # Garante que as validações de integridade sejam checadas
+            logger.info(f"Usuário ID {user.id} ({user.nome}) atualizado com sucesso.")
+            return existing_user
+        except IntegrityError as e:
+            logger.warning(f"Falha ao atualizar usuário ID {user.id}. Conflito de integridade.")
+            raise e
+
+    def delete(self, db: Session, user_id: int):
+        """
+        Deleta um usuário do sistema.
+
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            user_id (int): O ID do usuário a ser deletado.
+
+        Raises:
+            NoResultFound: Se o usuário a ser deletado não existir.
+        """
+        user_to_delete = db.get(User, user_id)
+        if user_to_delete is None:
+            raise NoResultFound(f"Usuário com ID {user_id} não encontrado para exclusão.")
+        db.delete(user_to_delete)
         logger.info(f"Usuário ID {user_id} deletado com sucesso.")
-        return True, "Usuário deletado com sucesso!"
-    except sqlite3.Error as e:
-        logger.error(f"Erro de banco de dados ao deletar usuário ID {user_id}: {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao deletar o usuário."
 
-def get_user_simulation_stats(user_id: int) -> Dict[str, float]:
-    """
-    Calcula estatísticas de simulação (total, média, soma) para um usuário específico.
+    def get_simulation_stats(self, db: Session, user_id: int) -> UserStats:
+        """
+        Calcula estatísticas de simulação para um usuário específico.
 
-    Args:
-        user_id (int): O ID do usuário.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            user_id (int): O ID do usuário.
 
-    Returns:
-        Dict[str, float]: Um dicionário com as estatísticas. Retorna zeros se não houver dados.
-    """
-    sql = "SELECT COUNT(id) as total_simulacoes, AVG(valor_credito) as media_credito, SUM(valor_credito) as total_credito FROM simulations WHERE user_id = ?"
-    default_stats = {'total_simulacoes': 0, 'media_credito': 0, 'total_credito': 0}
-    try:
-        with get_db_connection() as con:
-            stats = con.execute(sql, (user_id,)).fetchone()
-        if stats and stats['total_simulacoes'] > 0:
-            return dict(stats)
-        return default_stats
-    except sqlite3.Error as e:
-        logger.error(f"Erro ao buscar estatísticas do usuário ID {user_id}: {e}", exc_info=True)
-        return default_stats
+        Returns:
+            UserStats: Um objeto UserStats com as estatísticas.
+        """
+        # Usando SQLAlchemy Core para agregação para maior flexibilidade
+        stmt = select(
+            func.count(Simulation.id).label("total_simulacoes"),
+            func.coalesce(func.avg(Simulation.valor_credito), 0).label("media_credito"),
+            func.coalesce(func.sum(Simulation.valor_credito), 0).label("total_credito")
+        ).where(Simulation.user_id == user_id)
 
-def get_user_detailed_simulations(user_id: int) -> pd.DataFrame:
-    """
-    Retorna um DataFrame com as simulações detalhadas de um usuário.
-
-    Args:
-        user_id (int): O ID do usuário.
-
-    Returns:
-        pd.DataFrame: Um DataFrame com os detalhes da simulação ou um DataFrame vazio em caso de erro.
-    """
-    sql = "SELECT timestamp, valor_credito, nova_parcela_pos_lance FROM simulations WHERE user_id = ? ORDER BY timestamp DESC"
-    try:
-        with get_db_connection() as con:
-            df = pd.read_sql_query(sql, con, params=(user_id,))
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        logger.error(f"Falha ao buscar simulações detalhadas do usuário ID {user_id}: {e}", exc_info=True)
-        return pd.DataFrame()
+        result = db.execute(stmt).fetchone()
+        
+        if result:
+            return UserStats(
+                total_simulacoes=result.total_simulacoes,
+                media_credito=result.media_credito,
+                total_credito=result.total_credito
+            )
+        return UserStats() # Retorna estatísticas zeradas se não houver dados

@@ -1,4 +1,10 @@
-streamlit
-pandas
-fpdf
-bcrypt
+streamlit==1.36.0
+pandas==2.2.2
+plotly==5.22.0
+Pillow==10.3.0
+reportlab==4.1.0
+SQLAlchemy==2.0.31
+alembic==1.13.1
+pydantic==2.8.2
+passlib==1.7.4
+bcrypt==4.1.3

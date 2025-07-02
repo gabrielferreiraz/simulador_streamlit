@@ -1,136 +1,150 @@
 """
-Módulo de repositório para todas as operações de banco de dados relacionadas a equipes.
+Refatorado: Módulo de repositório para operações de equipes usando SQLAlchemy.
+
+Este repositório agora interage com o banco de dados através do ORM SQLAlchemy,
+utilizando objetos de sessão para todas as operações. Ele retorna instâncias
+dos modelos SQLAlchemy diretamente, e lida com as exceções do SQLAlchemy,
+proporcionando uma camada de acesso a dados mais robusta e orientada a objetos.
 """
-import sqlite3
-import pandas as pd
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional
 
-from .database import get_db_connection
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, NoResultFound
 
-# Configura o logger para este módulo
+from src.db.models import Team, User # Importa os modelos SQLAlchemy
+from src.db.data_models import TeamWithSupervisor # Dataclass que ainda é usado para retorno
+
 logger = logging.getLogger(__name__)
 
-def create_team(name: str, supervisor_id: int) -> Tuple[bool, str]:
-    """
-    Cria uma nova equipe e a associa a um supervisor.
-    A operação é transacional: se qualquer passo falhar, tudo é revertido.
+class TeamRepository:
+    """Gerencia todas as operações de banco de dados para a entidade Team."""
 
-    Args:
-        name (str): O nome da nova equipe (deve ser único).
-        supervisor_id (int): O ID do usuário supervisor.
+    def create(self, db: Session, name: str, supervisor_id: int) -> Team:
+        """
+        Cria uma nova equipe e a associa a um supervisor de forma transacional.
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    if not name or not name.strip():
-        return False, "O nome da equipe não pode ser vazio."
-    if supervisor_id is None:
-        return False, "É obrigatório selecionar um supervisor para criar uma equipe."
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            name (str): O nome da nova equipe (deve ser único).
+            supervisor_id (int): O ID do usuário supervisor.
 
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("BEGIN")  # Inicia a transação
-            
-            # 1. Cria a equipe
-            cur.execute("INSERT INTO teams (name, supervisor_id) VALUES (?, ?)", (name, supervisor_id))
-            team_id = cur.lastrowid
-            
-            # 2. Associa o supervisor à nova equipe
-            cur.execute("UPDATE users SET team_id = ? WHERE id = ?", (team_id, supervisor_id))
-            
-            con.commit()  # Finaliza a transação
-        logger.info(f"Equipe '{name}' (ID: {team_id}) criada com sucesso, supervisionada por usuário ID {supervisor_id}.")
-        return True, "Equipe criada com sucesso!"
-    except sqlite3.IntegrityError:
-        con.rollback()
-        logger.warning(f"Falha ao criar equipe. O nome '{name}' já existe.")
-        return False, f"Erro: O nome de equipe '{name}' já existe."
-    except sqlite3.Error as e:
-        con.rollback()
-        logger.error(f"Erro de banco de dados ao criar equipe '{name}': {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao criar a equipe."
+        Returns:
+            Team: O objeto Team criado.
 
-def get_all_teams() -> pd.DataFrame:
-    """
-    Busca todas as equipes e os nomes de seus supervisores.
+        Raises:
+            IntegrityError: Se o nome da equipe já existir.
+            NoResultFound: Se o supervisor não for encontrado.
+        """
+        # Verifica se o supervisor existe
+        supervisor = db.get(User, supervisor_id)
+        if not supervisor:
+            raise NoResultFound(f"Supervisor com ID {supervisor_id} não encontrado.")
 
-    Returns:
-        pd.DataFrame: DataFrame com colunas [id, name, supervisor_id, supervisor_name],
-                      ou um DataFrame vazio em caso de erro.
-    """
-    sql = """
-        SELECT t.id, t.name, t.supervisor_id, u.nome as supervisor_name
-        FROM teams t
-        LEFT JOIN users u ON t.supervisor_id = u.id 
-        ORDER BY t.name
-    """
-    try:
-        with get_db_connection() as con:
-            df = pd.read_sql_query(sql, con)
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        logger.error(f"Falha ao buscar todas as equipes: {e}", exc_info=True)
-        return pd.DataFrame()
+        new_team = Team(name=name, supervisor_id=supervisor_id)
+        try:
+            db.add(new_team)
+            db.flush() # Garante que o ID seja gerado e a integridade verificada
 
-def update_team_members(team_id: int, member_ids: List[int]) -> Tuple[bool, str]:
-    """
-    Atualiza os membros de uma equipe de forma transacional.
+            # Associa o supervisor à nova equipe (se ele não tiver uma equipe já)
+            # Esta lógica pode ser mais complexa dependendo das regras de negócio
+            # Aqui, estamos apenas garantindo que o supervisor_id da equipe seja setado
+            # e que o team_id do usuário supervisor seja atualizado.
+            supervisor.team_id = new_team.id
+            db.flush()
 
-    Args:
-        team_id (int): O ID da equipe a ser atualizada.
-        member_ids (List[int]): A lista completa de IDs dos membros da equipe.
+            logger.info(f"Equipe '{name}' (ID: {new_team.id}) criada, supervisionada por usuário ID {supervisor_id}.")
+            return new_team
+        except IntegrityError as e:
+            logger.warning(f"Falha ao criar equipe. O nome '{name}' já existe.")
+            raise e
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    try:
-        with get_db_connection() as con:
-            cur = con.cursor()
-            cur.execute("BEGIN")
-            
-            # 1. Remove todos os usuários da equipe (exceto o supervisor, que é fixo)
-            cur.execute("""
-                UPDATE users SET team_id = NULL 
-                WHERE team_id = ? AND id NOT IN (SELECT supervisor_id FROM teams WHERE id = ?)
-            """, (team_id, team_id))
-            
-            # 2. Adiciona os novos membros selecionados
-            if member_ids:
-                placeholders = ', '.join('?' for _ in member_ids)
-                sql = f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})"
-                params = [team_id] + member_ids
-                cur.execute(sql, params)
-                
-            con.commit()
-        logger.info(f"Membros da equipe ID {team_id} atualizados com sucesso.")
-        return True, "Membros da equipe atualizados com sucesso."
-    except sqlite3.Error as e:
-        con.rollback()
-        logger.error(f"Erro de banco de dados ao atualizar membros da equipe ID {team_id}: {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao atualizar os membros."
+    def get_all_with_supervisor_info(self, db: Session) -> List[TeamWithSupervisor]:
+        """
+        Busca todas as equipes com os nomes de seus supervisores.
 
-def delete_team(team_id: int) -> Tuple[bool, str]:
-    """
-    Deleta uma equipe. A associação dos membros é tratada por 'ON DELETE SET NULL'.
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
 
-    Args:
-        team_id (int): O ID da equipe a ser deletada.
+        Returns:
+            List[TeamWithSupervisor]: Uma lista de objetos TeamWithSupervisor.
+        """
+        stmt = select(Team).options(selectinload(Team.supervisor)).order_by(Team.name)
+        teams = db.execute(stmt).scalars().all()
+        
+        # Converte para TeamWithSupervisor dataclass
+        return [
+            TeamWithSupervisor(
+                id=team.id,
+                name=team.name,
+                supervisor_id=team.supervisor_id,
+                supervisor_name=team.supervisor.nome if team.supervisor else None
+            ) for team in teams
+        ]
 
-    Returns:
-        Tuple[bool, str]: (True, "Mensagem de sucesso") ou (False, "Mensagem de erro").
-    """
-    sql = "DELETE FROM teams WHERE id = ?"
-    try:
-        with get_db_connection() as con:
-            cur = con.execute(sql, (team_id,))
-            con.commit()
-            if cur.rowcount == 0:
-                logger.warning(f"Tentativa de deletar equipe ID {team_id}, mas a equipe não foi encontrada.")
-                return False, "Equipe não encontrada."
+    def get_by_id(self, db: Session, team_id: int) -> Team:
+        """
+        Busca uma equipe pelo seu ID.
+
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            team_id (int): O ID da equipe.
+
+        Returns:
+            Team: O objeto Team encontrado.
+
+        Raises:
+            NoResultFound: Se a equipe não for encontrada.
+        """
+        stmt = select(Team).where(Team.id == team_id)
+        team = db.execute(stmt).scalar_one_or_none()
+        if team is None:
+            raise NoResultFound(f"Equipe com ID {team_id} não encontrada.")
+        return team
+
+    def update_members(self, db: Session, team_id: int, member_ids: List[int]):
+        """
+        Atualiza os membros de uma equipe.
+
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            team_id (int): O ID da equipe a ser atualizada.
+            member_ids (List[int]): A lista completa de IDs dos membros da equipe.
+
+        Raises:
+            NoResultFound: Se a equipe não for encontrada.
+        """
+        team = db.get(Team, team_id)
+        if not team:
+            raise NoResultFound(f"Equipe com ID {team_id} não encontrada para atualização de membros.")
+
+        # Desassocia todos os usuários da equipe, exceto o supervisor
+        db.query(User).filter(
+            User.team_id == team_id,
+            User.id != team.supervisor_id # Não desassocia o supervisor
+        ).update({'team_id': None})
+
+        # Associa os novos membros
+        if member_ids:
+            db.query(User).filter(User.id.in_(member_ids)).update({'team_id': team_id})
+        
+        db.flush()
+        logger.info(f"Membros da equipe ID {team_id} atualizados.")
+
+    def delete(self, db: Session, team_id: int):
+        """
+        Deleta uma equipe.
+
+        Args:
+            db (Session): A sessão do banco de dados SQLAlchemy.
+            team_id (int): O ID da equipe a ser deletada.
+
+        Raises:
+            NoResultFound: Se a equipe a ser deletada não existir.
+        """
+        team_to_delete = db.get(Team, team_id)
+        if team_to_delete is None:
+            raise NoResultFound(f"Equipe com ID {team_id} não encontrada para exclusão.")
+        db.delete(team_to_delete)
         logger.info(f"Equipe ID {team_id} deletada com sucesso.")
-        return True, "Equipe deletada com sucesso!"
-    except sqlite3.Error as e:
-        logger.error(f"Erro de banco de dados ao deletar equipe ID {team_id}: {e}", exc_info=True)
-        return False, "Ocorreu um erro no banco de dados ao deletar a equipe."

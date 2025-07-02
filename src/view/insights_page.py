@@ -1,101 +1,107 @@
 """
-Módulo da view para a página de Dashboard de Análise (Insights).
+Refatorado: Módulo da view para a página de Insights.
+
+Esta view foi refatorada para ser uma consumidora do MetricsService.
+Ela não tem mais conhecimento sobre como as métricas são calculadas ou de onde
+vêm os dados. A view simplesmente solicita os dados agregados (sejam DataFrames
+ou objetos de métricas) ao serviço e os renderiza nos componentes do Streamlit,
+como gráficos e cartões. O tratamento de erros de banco de dados é encapsulado,
+tornando a UI mais robusta.
 """
 import streamlit as st
-import pandas as pd
 import plotly.express as px
-from typing import Optional
+import logging
 
-from src.db import simulation_repository as sim_repo
-from src.db.user_repository import get_user_by_id
+# Importações da nova arquitetura
+from src.config import config
+from src.utils.cached_data import (
+    get_cached_general_metrics,
+    get_cached_simulations_per_day,
+    get_cached_credit_distribution,
+    get_cached_simulations_by_consultant,
+    get_cached_team_simulation_stats,
+    get_cached_all_teams_with_supervisor_info
+)
+
+from sqlalchemy.exc import SQLAlchemyError # Exceções do SQLAlchemy
+
+logger = logging.getLogger(__name__)
 
 def show():
-    """
-    Renderiza a página de Dashboard de Análise com consultas otimizadas e controle de acesso.
-    """
-    st.title("Dashboard de Análise de Simulações")
+    """Renderiza a página de insights e dashboards."""
+    st.title("Insights e Desempenho")
 
-    user_role = st.session_state.get("user_role")
-    user_id = st.session_state.get("user_id")
+    # --- Filtros ---
+    st.sidebar.header("Filtros de Análise")
+    selected_team_id = None
+    # O filtro de equipe só aparece para Admin e Supervisor
+    if st.session_state.get("user_role") in [config.ROLE_ADMIN, config.ROLE_SUPERVISOR]:
+        try:
+            teams = get_cached_all_teams_with_supervisor_info()
+            team_options = {team.id: team.name for team in teams}
+            team_options[0] = "Todas as Equipes" # Adiciona a opção para ver todos
+            
+            selected_team_name = st.sidebar.selectbox(
+                "Filtrar por Equipe", 
+                options=list(team_options.values()),
+                index=0
+            )
+            # Converte o nome da equipe de volta para ID
+            selected_team_id = [id for id, name in team_options.items() if name == selected_team_name][0]
+            if selected_team_id == 0:
+                selected_team_id = None # O serviço espera None para buscar todos
 
-    # --- 1. Controle de Acesso ---
-    if user_role == "Consultor":
-        st.warning("Acesso negado. Esta página está disponível apenas para Supervisores e Administradores.")
-        st.stop()
+        except SQLAlchemyError as e:
+            st.sidebar.error(f"Erro ao carregar equipes: {e}")
+            logger.error(f"Erro de DB ao carregar filtro de equipes: {e}")
 
-    team_id: Optional[int] = None
-    if user_role == "Supervisor":
-        user_data = get_user_by_id(user_id)
-        if user_data and user_data["team_id"]:
-            team_id = user_data["team_id"]
-            st.info(f"Visualizando insights para a sua equipe.")
+    try:
+        # --- Métricas Gerais ---
+        st.header("Visão Geral")
+        metrics = get_cached_general_metrics(team_id=selected_team_id)
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total de Simulações", f"{metrics.total_simulacoes:,}".replace(",", "."))
+        col2.metric("Média de Crédito", f"R$ {metrics.media_credito:,.2f}".replace(",", "X").replace(".", ",".replace("X", ".")))
+        col3.metric("Média de Prazo", f"{metrics.media_prazo:.1f} meses")
+
+        st.divider()
+
+        # --- Gráficos ---
+        st.header("Análise Gráfica")
+        df_sim_per_day = get_cached_simulations_per_day(team_id=selected_team_id)
+        if not df_sim_per_day.empty:
+            fig_line = px.line(df_sim_per_day, x='data', y='simulacoes', title='Simulações Realizadas por Dia', labels={'data': 'Data', 'simulacoes': 'Nº de Simulações'})
+            st.plotly_chart(fig_line, use_container_width=True)
         else:
-            st.error("Você é um Supervisor, mas não está associado a uma equipe. Contate um Administrador.")
-            st.stop()
+            st.info("Não há dados de simulações por dia para exibir.")
 
-    # --- 2. Carregamento de Dados (Otimizado) ---
-    with st.spinner("Carregando dados do dashboard..."):
-        # Uma única chamada para cada tipo de dado, com o filtro de equipe aplicado no BD
-        general_metrics = sim_repo.get_general_metrics(team_id=team_id)
-        simulacoes_por_dia_df = sim_repo.get_simulations_per_day(team_id=team_id)
-        credit_dist_df = sim_repo.get_credit_distribution(team_id=team_id)
-        simulacoes_por_consultor_df = sim_repo.get_simulations_by_consultant(team_id=team_id)
-        
-        # Gráfico de equipes é apenas para Admins
-        team_stats_df = pd.DataFrame()
-        if user_role == "Admin":
-            team_stats_df = sim_repo.get_team_simulation_stats()
+        col1, col2 = st.columns(2)
+        with col1:
+            df_credit_dist = get_cached_credit_distribution(team_id=selected_team_id)
+            if not df_credit_dist.empty:
+                fig_hist = px.histogram(df_credit_dist, x='valor_credito', nbins=20, title='Distribuição de Valores de Crédito', labels={'valor_credito': 'Valor do Crédito (R$)'})
+                st.plotly_chart(fig_hist, use_container_width=True)
+            else:
+                st.info("Não há dados de distribuição de crédito para exibir.")
 
-    total_simulacoes, media_credito, media_prazo = general_metrics
-    if total_simulacoes == 0:
-        st.info("Nenhum dado de simulação encontrado para o filtro atual.")
-        st.stop()
+        with col2:
+            df_by_consultant = get_cached_simulations_by_consultant(team_id=selected_team_id)
+            if not df_by_consultant.empty:
+                fig_bar = px.bar(df_by_consultant.head(10), x='consultor', y='simulacoes', title='Top 10 Consultores por Nº de Simulações', labels={'consultor': 'Consultor', 'simulacoes': 'Nº de Simulações'})
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("Não há dados de simulações por consultor para exibir.")
 
-    # --- 3. Renderização das Métricas e Gráficos ---
-    st.markdown("#### Métricas Gerais")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total de Simulações", f"{total_simulacoes}")
-    col2.metric("Média de Crédito", f"R$ {media_credito:,.2f}")
-    col3.metric("Média de Prazo", f"{media_prazo:.0f} meses")
+        # Gráfico de pizza para Admins
+        if st.session_state.get("user_role") == config.ROLE_ADMIN:
+            st.subheader("Desempenho por Equipe")
+            df_team_stats = get_cached_team_simulation_stats()
+            if not df_team_stats.empty:
+                fig_pie = px.pie(df_team_stats, names='equipe', values='simulacoes', title='Distribuição de Simulações por Equipe')
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("Não há dados de simulações por equipe para exibir.")
 
-    st.markdown("---")
-    st.markdown("#### Análises Visuais")
-
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        if not simulacoes_por_dia_df.empty:
-            fig_daily = px.bar(simulacoes_por_dia_df, x='data', y='simulacoes',
-                               title='Simulações por Dia',
-                               labels={'data': 'Data', 'simulacoes': 'Nº de Simulações'},
-                               color_discrete_sequence=['#4CAF50'])
-            st.plotly_chart(fig_daily, use_container_width=True)
-        else:
-            st.info("Sem dados para o gráfico de simulações por dia.")
-
-        if user_role == "Admin" and not team_stats_df.empty:
-            fig_teams = px.bar(team_stats_df, x='equipe', y='simulacoes', color='equipe',
-                               title='Simulações por Equipe',
-                               labels={'equipe': 'Equipe', 'simulacoes': 'Nº de Simulações'},
-                               color_discrete_sequence=px.colors.sequential.Viridis)
-            st.plotly_chart(fig_teams, use_container_width=True)
-
-    with col_b:
-        if not credit_dist_df.empty:
-            fig_hist = px.histogram(credit_dist_df, x='valor_credito', nbins=20,
-                                  title='Distribuição de Crédito Simulado',
-                                  labels={'valor_credito': 'Valor do Crédito (R$)'},
-                                  color_discrete_sequence=['#66BB6A'])
-            st.plotly_chart(fig_hist, use_container_width=True)
-        else:
-            st.info("Sem dados para o gráfico de distribuição de crédito.")
-
-        if not simulacoes_por_consultor_df.empty:
-            title = 'Distribuição por Consultor' + (' da Equipe' if user_role == "Supervisor" else '')
-            fig_pie = px.pie(simulacoes_por_consultor_df, names='consultor', values='simulacoes',
-                             title=title,
-                             color_discrete_sequence=px.colors.sequential.Greens_r)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.info("Sem dados para o gráfico de simulações por consultor.")
-
+    except SQLAlchemyError as e:
+        st.error(f"Ocorreu um erro ao carregar as métricas: {e}")
+        logger.error(f"Erro de DB ao carregar página de insights: {e}", exc_info=True)
